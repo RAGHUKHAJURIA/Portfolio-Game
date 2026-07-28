@@ -1,0 +1,166 @@
+import { useEffect, useRef } from 'react'
+import { ISLAND, houses } from '../../data/portfolioData'
+import { playerState } from '../../state/controls'
+import { useGameStore } from '../../store/useGameStore'
+
+const SIZE = 150
+const WORLD_R = ISLAND.boundary + 4
+const DPR = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
+
+/**
+ * Canvas minimap. Redraws on rAF straight from `playerState`, so it stays in
+ * sync with the character without pushing a single React render.
+ */
+export function Minimap() {
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const visited = useGameStore((s) => s.visited)
+  const visitedRef = useRef(visited)
+  visitedRef.current = visited
+
+  useEffect(() => {
+    const cv = canvas.current
+    if (!cv) return
+    const ctx = cv.getContext('2d')
+    if (!ctx) return
+
+    cv.width = SIZE * DPR
+    cv.height = SIZE * DPR
+    ctx.scale(DPR, DPR)
+
+    const c = SIZE / 2
+    const k = (SIZE / 2 - 8) / WORLD_R
+    const toX = (x: number) => c + x * k
+    const toY = (z: number) => c + z * k
+
+    let raf = 0
+    const draw = () => {
+      raf = requestAnimationFrame(draw)
+      ctx.clearRect(0, 0, SIZE, SIZE)
+
+      // Water
+      ctx.fillStyle = '#16323d'
+      ctx.fillRect(0, 0, SIZE, SIZE)
+
+      // Island landmass
+      ctx.beginPath()
+      ctx.arc(c, c, ISLAND.radius * k, 0, Math.PI * 2)
+      ctx.fillStyle = '#4c5a33'
+      ctx.fill()
+
+      ctx.beginPath()
+      ctx.arc(c, c, (ISLAND.radius - 5) * k, 0, Math.PI * 2)
+      ctx.fillStyle = '#576636'
+      ctx.fill()
+
+      // Trails from the plaza to each building
+      ctx.strokeStyle = 'rgba(150,124,84,0.7)'
+      ctx.lineWidth = 2.5
+      ctx.lineCap = 'round'
+      for (const h of houses) {
+        ctx.beginPath()
+        ctx.moveTo(toX(0), toY(2))
+        ctx.lineTo(toX(h.position[0] + h.markerOffset[0]), toY(h.position[1] + h.markerOffset[1]))
+        ctx.stroke()
+      }
+
+      // Boundary
+      ctx.beginPath()
+      ctx.arc(c, c, ISLAND.boundary * k, 0, Math.PI * 2)
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)'
+      ctx.lineWidth = 1
+      ctx.setLineDash([3, 3])
+      ctx.stroke()
+      ctx.setLineDash([])
+
+      // Buildings
+      for (const h of houses) {
+        const hx = toX(h.position[0] + h.markerOffset[0])
+        const hy = toY(h.position[1] + h.markerOffset[1])
+        const seen = visitedRef.current[h.id]
+
+        ctx.beginPath()
+        ctx.arc(hx, hy, 8, 0, Math.PI * 2)
+        ctx.fillStyle = `${h.color}33`
+        ctx.fill()
+
+        ctx.beginPath()
+        ctx.arc(hx, hy, 4.6, 0, Math.PI * 2)
+        ctx.fillStyle = seen ? h.color : '#0d1014'
+        ctx.fill()
+        ctx.strokeStyle = h.color
+        ctx.lineWidth = 1.8
+        ctx.stroke()
+
+        if (seen) {
+          ctx.strokeStyle = '#0d1014'
+          ctx.lineWidth = 1.6
+          ctx.beginPath()
+          ctx.moveTo(hx - 2, hy)
+          ctx.lineTo(hx - 0.4, hy + 1.8)
+          ctx.lineTo(hx + 2.2, hy - 1.8)
+          ctx.stroke()
+        }
+      }
+
+      // Player
+      const px = toX(playerState.x)
+      const py = toY(playerState.z)
+
+      // View cone
+      ctx.save()
+      ctx.translate(px, py)
+      ctx.rotate(-playerState.heading + Math.PI)
+      const grad = ctx.createLinearGradient(0, 0, 0, -26)
+      grad.addColorStop(0, 'rgba(240,169,46,0.45)')
+      grad.addColorStop(1, 'rgba(240,169,46,0)')
+      ctx.beginPath()
+      ctx.moveTo(0, 0)
+      ctx.arc(0, 0, 26, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5)
+      ctx.closePath()
+      ctx.fillStyle = grad
+      ctx.fill()
+
+      // Arrow
+      ctx.beginPath()
+      ctx.moveTo(0, -6)
+      ctx.lineTo(4.4, 5)
+      ctx.lineTo(0, 2.6)
+      ctx.lineTo(-4.4, 5)
+      ctx.closePath()
+      ctx.fillStyle = '#f0a92e'
+      ctx.fill()
+      ctx.strokeStyle = '#0d1014'
+      ctx.lineWidth = 1.2
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    draw()
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  return (
+    <div className="relative">
+      <div
+        className="hud-panel clip-panel relative overflow-hidden"
+        style={{ width: SIZE, height: SIZE }}
+      >
+        <canvas ref={canvas} style={{ width: SIZE, height: SIZE }} />
+        <div className="scanlines pointer-events-none absolute inset-0 opacity-40" />
+        {/* Cardinal marks */}
+        <span className="pointer-events-none absolute left-1/2 top-0.5 -translate-x-1/2 font-mono text-[8px] text-white/50">
+          N
+        </span>
+        <span className="pointer-events-none absolute bottom-0.5 left-1/2 -translate-x-1/2 font-mono text-[8px] text-white/30">
+          S
+        </span>
+      </div>
+      <div className="mt-1 flex items-center justify-between px-1">
+        <span className="hud-label">tac map</span>
+        <span className="font-mono text-[9px] text-white/35 tabular-nums">
+          {Math.round(ISLAND.radius * 2)}m
+        </span>
+      </div>
+    </div>
+  )
+}

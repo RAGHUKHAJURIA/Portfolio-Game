@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e2731"/>
+      <stop offset="55%" stop-color="#12161b"/>
+      <stop offset="100%" stop-color="#080a0d"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2c5a6b"/>
+      <stop offset="100%" stop-color="#16323d"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0 L0 0 0 48" fill="none" stroke="#f0a92e" stroke-width="1" opacity="0.09"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+
+  <!-- island vignette -->
+  <g transform="translate(890 330)">
+    <circle r="215" fill="url(#sea)" opacity="0.85"/>
+    <circle r="160" fill="#4c5a33"/>
+    <circle r="140" fill="#5f6f3e"/>
+    <circle r="150" fill="none" stroke="#c2b280" stroke-width="14" opacity="0.35"/>
+    <circle r="196" fill="none" stroke="#3fa9f5" stroke-width="2" stroke-dasharray="8 8" opacity="0.6"/>
+    <g fill="none" stroke="#8a7554" stroke-width="4" opacity="0.7">
+      <path d="M0 8 L-6 -78"/><path d="M0 8 L-96 -30"/>
+      <path d="M0 8 L88 -34"/><path d="M0 8 L66 82"/><path d="M0 8 L-72 92"/>
+    </g>
+    <g>
+      <circle cx="-6" cy="-78" r="11" fill="#f0a92e"/>
+      <circle cx="-96" cy="-30" r="11" fill="#5fd3a0"/>
+      <circle cx="88" cy="-34" r="11" fill="#e05c5c"/>
+      <circle cx="66" cy="82" r="11" fill="#8f7fe0"/>
+      <circle cx="-72" cy="92" r="11" fill="#3fa9f5"/>
+    </g>
+  </g>
+
+  <!-- corner brackets -->
+  <g stroke="#f0a92e" stroke-width="4" fill="none" opacity="0.55">
+    <path d="M48 96 L48 48 L96 48"/>
+    <path d="M1152 96 L1152 48 L1104 48"/>
+    <path d="M48 534 L48 582 L96 582"/>
+    <path d="M1152 534 L1152 582 L1104 582"/>
+  </g>
+
+  <g font-family="Oswald, Impact, sans-serif">
+    <text x="96" y="216" fill="#f0a92e" font-size="21" letter-spacing="10">DROP ZONE · PORTFOLIO</text>
+    <text x="96" y="316" fill="#ffffff" font-size="88" font-weight="700" letter-spacing="2">RAGHU KHAJURIA</text>
+    <text x="96" y="368" fill="#9aa4ab" font-size="26" letter-spacing="4">Applied AI/ML · Full-stack Engineer</text>
+  </g>
+
+  <g font-family="JetBrains Mono, monospace" fill="#6f7c85" font-size="17" letter-spacing="3">
+    <text x="98" y="440">An interactive 3D battle-royale island.</text>
+    <text x="98" y="470">Walk up to a building to open a section.</text>
+  </g>
+
+  <g transform="translate(96 508)">
+    <rect width="250" height="52" fill="none" stroke="#f0a92e" stroke-width="3"/>
+    <text x="125" y="34" fill="#f0a92e" font-family="Oswald, Impact, sans-serif" font-size="22"
+          letter-spacing="7" text-anchor="middle">DROP IN</text>
+  </g>
+</svg>

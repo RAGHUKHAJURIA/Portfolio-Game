@@ -1,0 +1,39 @@
+{
+  "name": "3d-website",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "check": "tsc -b && tsx scripts/smoke.ts",
+    "verify": "npm run check && npm run build && node scripts/verify.mjs"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "@react-three/rapier": "^1.5.0",
+    "framer-motion": "^11.18.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0",
+    "zustand": "^4.5.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@types/three": "^0.169.0",
+    "@vitejs/plugin-react": "^6.0.3",
+    "autoprefixer": "^10.5.4",
+    "oxlint": "^1.71.0",
+    "playwright": "^1.62.0",
+    "postcss": "^8.5.23",
+    "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.1",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1"
+  }
+}
