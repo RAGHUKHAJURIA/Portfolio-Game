@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useRapier } from '@react-three/rapier'
 import { Vector3 } from 'three'
@@ -61,10 +61,20 @@ export function CameraRig() {
   const look = useRef(new Vector3(0, 1.4, 0))
   const boom = useRef(cameraOrbit.distance)
   const initialised = useRef(false)
+  const phase = useGameStore((s) => s.phase)
+
+  // The drop teleports the character 40 units into the air. Damping toward
+  // that would leave the camera far below, and the character would fall
+  // straight past it. Snap instead, then damp from there.
+  useEffect(() => {
+    if (phase === 'dropping') {
+      initialised.current = false
+      boom.current = cameraOrbit.targetDistance
+    }
+  }, [phase])
 
   useFrame((_, rawDelta) => {
     const dt = Math.min(rawDelta, 1 / 20)
-    const phase = useGameStore.getState().phase
 
     // Ease the zoom toward its target.
     cameraOrbit.distance += (cameraOrbit.targetDistance - cameraOrbit.distance) * Math.min(1, dt * 8)
@@ -84,30 +94,35 @@ export function CameraRig() {
 
     let wanted = dist
 
-    // Boom collision: cast outward from the player's head (already clear of
-    // their own capsule, so there's nothing to filter out).
-    const w = rawWorld(world)
-    if (w?.castRay && rapier?.Ray) {
-      try {
-        const ray = new rapier.Ray(
-          { x: _target.x + _right.x * shoulder, y: _target.y, z: _target.z + _right.z * shoulder },
-          { x: _dir.x, y: _dir.y, z: _dir.z }
-        )
-        const hit = w.castRay(ray, dist, true)
-        if (hit) {
-          const toi = (hit as any).timeOfImpact ?? (hit as any).toi
-          if (typeof toi === 'number') wanted = Math.min(wanted, toi - 0.4)
+    // Boom collision is only meaningful on the ground. Mid-drop the character
+    // is in open air, and letting a treetop below them yank the boom in would
+    // wreck the hero shot.
+    if (phase !== 'dropping') {
+      // Cast outward from the player's head, which is already clear of their
+      // own capsule, so there's nothing to filter out.
+      const w = rawWorld(world)
+      if (w?.castRay && rapier?.Ray) {
+        try {
+          const ray = new rapier.Ray(
+            { x: _target.x + _right.x * shoulder, y: _target.y, z: _target.z + _right.z * shoulder },
+            { x: _dir.x, y: _dir.y, z: _dir.z }
+          )
+          const hit = w.castRay(ray, dist, true)
+          if (hit) {
+            const toi = (hit as any).timeOfImpact ?? (hit as any).toi
+            if (typeof toi === 'number') wanted = Math.min(wanted, toi - 0.4)
+          }
+        } catch {
+          /* rapier build differences — degrade to no boom collision */
         }
-      } catch {
-        /* rapier build differences — degrade to no boom collision */
       }
-    }
 
-    // Tree canopies are not physics colliders (you walk through foliage), so
-    // the ray above sails right through them. Test them here instead, or the
-    // camera ends up parked inside a ball of leaves.
-    const canopyToi = canopyHit(_target.x, _target.y, _target.z, _dir, wanted)
-    if (canopyToi !== null) wanted = Math.min(wanted, canopyToi - 0.5)
+      // Tree canopies are not physics colliders (you walk through foliage), so
+      // the ray above sails right through them. Test them here instead, or the
+      // camera ends up parked inside a ball of leaves.
+      const canopyToi = canopyHit(_target.x, _target.y, _target.z, _dir, wanted)
+      if (canopyToi !== null) wanted = Math.min(wanted, canopyToi - 0.5)
+    }
 
     // Never collapse all the way onto the character — a third-person camera
     // inside the backpack is worse than one clipping a trunk for a moment.
@@ -132,8 +147,10 @@ export function CameraRig() {
       look.current.copy(_target)
       initialised.current = true
     } else {
-      const posK = 1 - Math.exp(-dt * (phase === 'dropping' ? 3.5 : 11))
-      const lookK = 1 - Math.exp(-dt * (phase === 'dropping' ? 3 : 14))
+      // Fast enough during the drop to keep pace with a 30 u/s descent,
+      // slow enough to still read as a floating chase camera.
+      const posK = 1 - Math.exp(-dt * (phase === 'dropping' ? 7 : 11))
+      const lookK = 1 - Math.exp(-dt * (phase === 'dropping' ? 6 : 14))
       camera.position.lerp(_desired, posK)
       look.current.lerp(_target, lookK)
     }

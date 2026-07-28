@@ -52,8 +52,9 @@ export function useKeyboardControls() {
       }
 
       // While a panel is open the arrow keys and space belong to the panel's
-      // scroll container, so only swallow them out on the island.
-      if (store.activeHouse !== null) return
+      // scroll container, and in reduced mode they belong to the page — so
+      // only swallow them when there's actually an island to walk around.
+      if (store.activeHouse !== null || store.reducedMode) return
       if (BLOCK_SCROLL.has(e.code)) e.preventDefault()
 
       if (store.phase === 'ready' && (e.code === 'Space' || e.code === 'Enter')) {

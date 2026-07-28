@@ -21,7 +21,9 @@ export function AboutHouse() {
         <boxGeometry args={[7.46, 0.75, 6.46]} />
       </mesh>
 
-      {/* Gable roof */}
+      {/* Gable roof. Sign matters: rotation.x = +θ drops the panel's far
+          edge, which is what makes a ridge. Negating it builds a butterfly
+          roof that rises outward and leaves the ridge cap in mid-air. */}
       <group position={[0, 3.45, 0]}>
         {[-1, 1].map((s) => (
           <mesh
@@ -29,20 +31,20 @@ export function AboutHouse() {
             castShadow
             receiveShadow
             position={[0, 0.62, s * 1.68]}
-            rotation={[s * -0.62, 0, 0]}
+            rotation={[s * 0.62, 0, 0]}
             material={m.roofTile}
           >
             <boxGeometry args={[8.2, 0.22, 4.1]} />
           </mesh>
         ))}
-        {/* Ridge cap */}
-        <mesh position={[0, 1.28, 0]} material={m.roofMetal}>
-          <boxGeometry args={[8.3, 0.16, 0.4]} />
+        {/* Ridge cap, sitting on the peak the panels actually meet at. */}
+        <mesh position={[0, 1.8, 0]} material={m.roofMetal}>
+          <boxGeometry args={[8.3, 0.18, 0.42]} />
         </mesh>
-        {/* Gable ends */}
+        {/* Gable infill closing the triangle at each end */}
         {[-1, 1].map((s) => (
-          <mesh key={s} position={[s * 3.7, 0.6, 0]} rotation={[0, 0, 0]} material={m.plaster}>
-            <boxGeometry args={[0.12, 1.2, 3.2]} />
+          <mesh key={s} position={[s * 3.7, 0.82, 0]} material={m.plaster}>
+            <boxGeometry args={[0.12, 1.75, 3.1]} />
           </mesh>
         ))}
       </group>
@@ -96,7 +98,8 @@ export function AboutHouse() {
             <boxGeometry args={[0.18, 2.3, 0.18]} />
           </mesh>
         ))}
-        <mesh castShadow position={[0, 2.66, 0.2]} rotation={[-0.17, 0, 0]} material={m.roofMetal}>
+        {/* Slopes down and away from the house, like a porch awning should. */}
+        <mesh castShadow position={[0, 2.66, 0.2]} rotation={[0.17, 0, 0]} material={m.roofMetal}>
           <boxGeometry args={[5.6, 0.14, 2.6]} />
         </mesh>
         {/* Steps */}

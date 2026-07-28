@@ -67,7 +67,7 @@ export function DropOverlay() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.6 }}
-            className="absolute bottom-[16%] left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-[0.28em] text-white/30"
+            className="absolute bottom-[16%] left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-[9px] uppercase tracking-[0.2em] text-white/30 sm:text-[10px] sm:tracking-[0.28em]"
           >
             landing zone · drop plaza
           </motion.div>

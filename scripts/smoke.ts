@@ -52,6 +52,27 @@ for (let i = 0; i < houses.length; i++) {
   }
 }
 
+console.log('\n--- building compound is flat ---')
+// Every house authors its props and aprons at local y = 0, which is only
+// correct where terrain.ts has flattened the ground. If the terrain deviates
+// from pad height inside this radius, those props float or sink.
+const COMPOUND_R = 10
+for (const h of houses) {
+  const padY = terrainHeight(h.position[0], h.position[1])
+  let worstDev = 0
+  for (let ring = 1; ring <= 4; ring++) {
+    const r = (COMPOUND_R * ring) / 4
+    for (let a = 0; a < 24; a++) {
+      const t = (a / 24) * Math.PI * 2
+      const dev = Math.abs(
+        terrainHeight(h.position[0] + Math.cos(t) * r, h.position[1] + Math.sin(t) * r) - padY
+      )
+      worstDev = Math.max(worstDev, dev)
+    }
+  }
+  check(`  ${h.id}: flat within ${COMPOUND_R}u`, worstDev < 0.5, `maxDev=${worstDev.toFixed(2)}`)
+}
+
 console.log('\n--- terrain sanity ---')
 const spawn = terrainHeight(0, 2)
 check('plaza above sea', spawn > ISLAND.seaLevel + 1, `y=${spawn.toFixed(2)}`)

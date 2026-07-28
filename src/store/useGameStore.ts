@@ -22,6 +22,8 @@ type GameState = {
   visited: Record<string, boolean>
   /** Global mute. */
   muted: boolean
+  /** No WebGL — the island never runs and the panels are served as a document. */
+  reducedMode: boolean
 
   setPhase: (p: Phase) => void
   setProgress: (p: number) => void
@@ -30,6 +32,7 @@ type GameState = {
   closeHouse: () => void
   setSubIndex: (i: number | null) => void
   setIsMobile: (m: boolean) => void
+  setReducedMode: (r: boolean) => void
   markMoved: () => void
   toggleMute: () => void
 }
@@ -44,6 +47,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   hasMoved: false,
   visited: {},
   muted: false,
+  reducedMode: false,
 
   setPhase: (phase) => set({ phase }),
   setProgress: (progress) => set({ progress }),
@@ -59,6 +63,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   closeHouse: () => set({ activeHouse: null, subIndex: null }),
   setSubIndex: (subIndex) => set({ subIndex }),
   setIsMobile: (isMobile) => set({ isMobile }),
+  setReducedMode: (reducedMode) => set({ reducedMode }),
   markMoved: () => {
     if (!get().hasMoved) set({ hasMoved: true })
   },

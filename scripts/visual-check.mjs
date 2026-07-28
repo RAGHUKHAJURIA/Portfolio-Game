@@ -1,12 +1,13 @@
-﻿/**
+/**
  * Loads the built site in headless Chromium (SwiftShader WebGL), clicks
- * through the drop sequence, walks the character around, and screenshots
- * each stage. Any console error or page exception fails the run.
+ * through the drop sequence, walks the character around, opens every panel,
+ * and screenshots each stage. Any console error or page exception fails
+ * the run.
  *
  *   node scripts/visual-check.mjs [baseUrl] [outDir]
  */
 import { chromium } from 'playwright'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 
 const base = process.argv[2] ?? 'http://localhost:4173'
 const outDir = process.argv[3] ?? 'shots'
@@ -23,25 +24,43 @@ const browser = await chromium.launch({
     '--ignore-gpu-blocklist',
   ],
 })
-const page = await browser.newPage({ viewport: { width: 1366, height: 768 } })
 
-page.on('console', (msg) => {
-  const t = msg.type()
-  if (t === 'error') errors.push(msg.text())
-  else if (t === 'warning') warnings.push(msg.text())
-})
-page.on('pageerror', (e) => errors.push(`PAGEERROR: ${e.message}\n${e.stack ?? ''}`))
+const watch = (p, tag = '') => {
+  p.on('console', (msg) => {
+    const t = msg.type()
+    if (t === 'error') errors.push(tag + msg.text())
+    else if (t === 'warning') warnings.push(tag + msg.text())
+  })
+  p.on('pageerror', (e) => errors.push(`${tag}PAGEERROR: ${e.message}\n${e.stack ?? ''}`))
+  return p
+}
 
-// Software WebGL renders this scene at a few frames per second, so give the
-// compositor a long leash. This is a SwiftShader limit, not an app problem.
+const page = watch(await browser.newPage({ viewport: { width: 1366, height: 768 } }))
+
+/**
+ * Capture via CDP rather than page.screenshot().
+ *
+ * Software WebGL renders this scene at a few frames per second and the page
+ * never goes idle, so Playwright's screenshot helper sits waiting for a
+ * stable compositor frame that is never coming. Page.captureScreenshot grabs
+ * whatever is on screen right now, which is all we need. This is a
+ * headless-renderer limitation, not an app problem.
+ */
+const sessions = new WeakMap()
 const shot = async (name, target = page) => {
-  await target.screenshot({ path: `${outDir}/${name}.png`, timeout: 180000, animations: 'allow' })
-  console.log(`  â–¸ ${outDir}/${name}.png`)
+  let client = sessions.get(target)
+  if (!client) {
+    client = await target.context().newCDPSession(target)
+    sessions.set(target, client)
+  }
+  const { data } = await client.send('Page.captureScreenshot', { format: 'png' })
+  writeFileSync(`${outDir}/${name}.png`, Buffer.from(data, 'base64'))
+  console.log(`  > ${outDir}/${name}.png`)
 }
 
 const wait = (ms) => page.waitForTimeout(ms)
 
-console.log(`Loading ${base} â€¦`)
+console.log(`Loading ${base} ...`)
 await page.goto(base, { waitUntil: 'load', timeout: 60000 })
 
 // Confirm WebGL actually came up.
@@ -61,117 +80,125 @@ await shot('01-loading')
 // Drop in.
 const dropBtn = page.getByRole('button', { name: /drop in/i })
 await dropBtn.waitFor({ state: 'visible', timeout: 30000 })
-await dropBtn.click({ force: true, timeout: 180000 })
+await dropBtn.click({ force: true, timeout: 120000 })
 console.log('Dropped in.')
 
-await wait(1500)
+await wait(1600)
 await shot('02-parachute')
 
-// Wait out the descent.
-await wait(7000)
+// Wait out the descent, then confirm we actually reached the island.
+await wait(9000)
 await shot('03-landed')
+await page.locator('button[title="Open ABOUT"]').waitFor({ state: 'visible', timeout: 90000 })
+console.log('Landed, HUD is up.')
 
-const canvas = await page.$('canvas')
-const box = await canvas.boundingBox()
+const box = await (await page.$('canvas')).boundingBox()
 const cx = box.x + box.width / 2
 const cy = box.y + box.height / 2
 
-// Look around a little.
+// Look around.
 await page.mouse.move(cx, cy)
 await page.mouse.down()
 await page.mouse.move(cx + 260, cy + 40, { steps: 18 })
 await page.mouse.up()
-await wait(700)
+await wait(800)
 await shot('04-look')
 
-// Walk forward, then sprint.
+// Walk, then sprint.
 await page.keyboard.down('KeyW')
-await wait(1400)
+await wait(1600)
 await shot('05-walking')
 await page.keyboard.down('ShiftLeft')
-await wait(1500)
+await wait(1600)
 await shot('06-sprinting')
 await page.keyboard.up('ShiftLeft')
 await page.keyboard.up('KeyW')
 
 // Jump.
 await page.keyboard.press('Space')
-await wait(320)
+await wait(340)
 await shot('07-jump')
-await wait(1200)
+await wait(1400)
 
-// Open every section straight from the objective tracker.
+// Open every section from the objective tracker.
 for (const label of ['ABOUT', 'PROJECTS', 'SKILLS', 'EXPERIENCE', 'CONTACT']) {
-  const btn = page.locator(`button[title="Open ${label}"]`)
   await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 60000 }).catch(() => {})
-  await btn.click({ timeout: 180000 })
-  await wait(950)
+  await page.locator(`button[title="Open ${label}"]`).click({ timeout: 120000 })
+  await page.getByRole('dialog').waitFor({ state: 'visible', timeout: 60000 })
+  await wait(900)
   await shot(`08-panel-${label.toLowerCase()}`)
 
   if (label === 'PROJECTS') {
-    const crate = page.getByTestId('crate-card').first()
-    await crate.click({ timeout: 180000 })
+    await page.getByTestId('crate-card').first().click({ timeout: 120000 })
     await wait(900)
     await shot('09-project-detail')
     // First Escape backs out of the crate detail, second closes the panel.
     await page.keyboard.press('Escape')
-    await wait(400)
+    await wait(500)
   }
 
   await page.keyboard.press('Escape')
-  await wait(600)
+  await wait(700)
   // The objective tracker only exists while no panel is open.
-  await page.locator('button[title="Open ABOUT"]').waitFor({ state: 'visible', timeout: 15000 })
+  await page.locator('button[title="Open ABOUT"]').waitFor({ state: 'visible', timeout: 30000 })
 }
 
-// Back on the island.
-await page.keyboard.press('Escape')
-await wait(700)
+await wait(900)
 await shot('10-back-on-island')
+console.log('All five panels opened and closed.')
 
-// Player state readout â€” proves the character actually moved.
-const finalState = await page.evaluate(() => {
-  const c = document.querySelector('canvas')
-  return { hasCanvas: !!c, w: c?.width, h: c?.height }
-})
-console.log('Canvas:', JSON.stringify(finalState))
-
-// Mobile pass. Close the desktop page first — two live WebGL scenes at once
+// Mobile pass. Close the desktop page first - two live WebGL scenes at once
 // is more than software rendering can keep up with.
 await page.close()
 
-const mob = await browser.newPage({
-  viewport: { width: 390, height: 844 },
-  isMobile: true,
-  hasTouch: true,
-  deviceScaleFactor: 2,
-})
-mob.on('pageerror', (e) => errors.push(`MOBILE PAGEERROR: ${e.message}`))
-mob.on('console', (m) => m.type() === 'error' && errors.push(`MOBILE: ${m.text()}`))
+const mob = watch(
+  await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    deviceScaleFactor: 2,
+  }),
+  'MOBILE: '
+)
 await mob.goto(base, { waitUntil: 'load', timeout: 60000 })
-await mob.waitForTimeout(2600)
+await mob.waitForTimeout(2800)
 await shot('11-mobile-loading', mob)
-console.log(`  â–¸ ${outDir}/11-mobile-loading.png`)
+
 const mDrop = mob.getByRole('button', { name: /drop in/i })
 await mDrop.waitFor({ state: 'visible', timeout: 30000 })
-await mDrop.click({ force: true, timeout: 180000 })
-await mob.waitForTimeout(9000)
+await mDrop.click({ force: true, timeout: 120000 })
+
+// Wait for the drop to actually finish rather than guessing a duration —
+// software rendering makes the intro take far longer here than on real
+// hardware, and the app's own watchdog caps it at 9s of wall clock.
+await mob
+  .locator('button[title="Open PROJECTS"]')
+  .waitFor({ state: 'visible', timeout: 120000 })
+await mob.waitForTimeout(1200)
 await shot('12-mobile-hud', mob)
-console.log(`  â–¸ ${outDir}/12-mobile-hud.png`)
+
+// Confirm the touch UI is actually present.
+const stick = await mob.locator('[data-ui].rounded-full').first().isVisible().catch(() => false)
+console.log(`Mobile joystick visible: ${stick}`)
+if (!stick) errors.push('MOBILE: on-screen joystick not rendered')
+
+// Open a panel by touch.
+await mob.locator('button[title="Open PROJECTS"]').click({ timeout: 60000 })
+await mob.waitForTimeout(1000)
+await shot('13-mobile-panel', mob)
 
 await browser.close()
 
 console.log(`\n${'='.repeat(60)}`)
 if (warnings.length) {
-  console.log(`\n${warnings.length} warning(s):`)
-  for (const w of [...new Set(warnings)].slice(0, 12)) console.log('  âš  ' + w.slice(0, 300))
+  const uniq = [...new Set(warnings)]
+  console.log(`\n${uniq.length} unique warning(s):`)
+  for (const w of uniq.slice(0, 12)) console.log('  ! ' + w.slice(0, 300))
 }
 if (errors.length) {
-  console.log(`\nâŒ ${errors.length} error(s):`)
-  for (const e of [...new Set(errors)].slice(0, 20)) console.log('  âœ– ' + e.slice(0, 900))
+  const uniq = [...new Set(errors)]
+  console.log(`\nFAILED - ${uniq.length} unique error(s):`)
+  for (const e of uniq.slice(0, 20)) console.log('  x ' + e.slice(0, 900))
   process.exit(1)
 }
-console.log('\nâœ… no console errors or page exceptions')
-
-
-
+console.log('\nPASS - no console errors or page exceptions')

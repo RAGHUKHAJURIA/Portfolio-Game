@@ -9,10 +9,10 @@ export function SkillsHouse() {
   const m = useBuildMats()
 
   return (
-    <HouseFrame id="skills" labelHeight={6.6}>
-      {/* Gravel pad */}
-      <mesh receiveShadow position={[0, 0.08, 1.5]} material={m.tarmac}>
-        <boxGeometry args={[13, 0.16, 13]} />
+    <HouseFrame id="skills" labelHeight={7.4}>
+      {/* Gravel pad — thick slab sunk into the ground, not a thin sheet. */}
+      <mesh receiveShadow position={[0, -1.46, 1]} material={m.tarmac}>
+        <boxGeometry args={[13, 3, 14]} />
       </mesh>
 
       {/* Tent body */}
@@ -20,27 +20,42 @@ export function SkillsHouse() {
         <boxGeometry args={[8.4, 2.4, 6.4]} />
       </mesh>
 
-      {/* Ridge roof */}
+      {/* Ridge roof — a proper field-tent pitch. A shallower angle reads as a
+          flat slab floating over the tent from the game camera's height. */}
       <group position={[0, 2.4, 0]}>
         {[-1, 1].map((s) => (
           <mesh
             key={s}
             castShadow
             receiveShadow
-            position={[0, 0.55, s * 1.68]}
-            rotation={[s * -0.55, 0, 0]}
+            position={[0, 0.72, s * 1.65]}
+            // Sign matters: rotation.x = +θ drops the panel's far edge, which
+            // is what makes a ridge. Negating it builds a butterfly roof that
+            // rises outward and leaves the ridge cap floating in mid-air.
+            rotation={[s * 0.72, 0, 0]}
             material={m.canvasDark}
           >
-            <boxGeometry args={[9, 0.18, 4]} />
+            <boxGeometry args={[8.8, 0.18, 4.4]} />
           </mesh>
         ))}
-        <mesh position={[0, 1.12, 0]} material={m.canvasTent}>
-          <boxGeometry args={[9.1, 0.16, 0.42]} />
+        <mesh position={[0, 2.12, 0]} material={m.canvasTent}>
+          <boxGeometry args={[8.9, 0.18, 0.44]} />
         </mesh>
-        {/* Gable infill */}
+        {/* Gable infill closing the triangle at each end */}
         {[-1, 1].map((s) => (
-          <mesh key={s} position={[s * 4.25, 0.52, 0]} material={m.canvasTent}>
-            <boxGeometry args={[0.14, 1.1, 3.2]} />
+          <mesh key={s} position={[s * 4.28, 1.0, 0]} material={m.canvasTent}>
+            <boxGeometry args={[0.16, 2.1, 3.0]} />
+          </mesh>
+        ))}
+        {/* Ridge pole ends poking out */}
+        {[-1, 1].map((s) => (
+          <mesh
+            key={s}
+            position={[s * 4.7, 2.12, 0]}
+            rotation={[0, 0, Math.PI / 2]}
+            material={m.woodDark}
+          >
+            <cylinderGeometry args={[0.06, 0.06, 0.9, 5]} />
           </mesh>
         ))}
       </group>

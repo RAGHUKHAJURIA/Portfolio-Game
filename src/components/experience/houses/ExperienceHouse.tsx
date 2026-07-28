@@ -10,9 +10,13 @@ export function ExperienceHouse() {
 
   return (
     <HouseFrame id="experience" labelHeight={9.4}>
-      {/* Packed-earth pad */}
-      <mesh receiveShadow position={[0, 0.08, 3]} material={m.tarmac}>
-        <boxGeometry args={[16, 0.16, 16]} />
+      {/* Packed-earth pad. Deliberately a thick slab sunk into the ground
+          rather than a thin sheet: the terrain is only perfectly flat within
+          ~7.5 units of the building, so a thin pad would float at its corners
+          wherever the ground falls away. Buried, it reads as a raised
+          concrete platform instead. */}
+      <mesh receiveShadow position={[0, -1.45, 1.5]} material={m.tarmac}>
+        <boxGeometry args={[15, 3, 15]} />
       </mesh>
 
       {/* Observation post — concrete base */}
@@ -73,12 +77,14 @@ export function ExperienceHouse() {
       </mesh>
       <pointLight position={[-1.6, 2.2, 3.4]} intensity={6} distance={8} color="#c7b9ff" />
 
-      {/* Obstacle course — one obstacle per timeline entry. Pushed past the
-          door marker at local (0, 7.0) so the approach stays clear. */}
+      {/* Obstacle course — one obstacle per timeline entry. Set off to the
+          side of the door marker at local (0, 7.0) so the approach stays
+          clear, and kept within ~10 units of centre so it sits on flattened
+          ground rather than floating over the natural terrain. */}
       {timeline.map((_, i) => {
-        const x = -6.5 + i * 4.6
+        const x = -5.2 + i * 5.2
         return (
-          <group key={i} position={[x, 0, 12.5]}>
+          <group key={i} position={[x, 0, 9.2]}>
             {/* Low wall */}
             <mesh castShadow receiveShadow position={[0, 0.6, 0]} material={m.wood}>
               <boxGeometry args={[3.0, 1.2, 0.3]} />
@@ -99,14 +105,14 @@ export function ExperienceHouse() {
       {Array.from({ length: 6 }, (_, i) => (
         <Tire
           key={i}
-          position={[-7.8 + (i % 2) * 1.0, 0.28, 15.6 + Math.floor(i / 2) * 1.0]}
+          position={[-6.6 + (i % 2) * 1.0, 0.28, 4.6 + Math.floor(i / 2) * 1.0]}
           rotation={[Math.PI / 2, 0, i * 0.4]}
           scale={0.95}
         />
       ))}
 
       {/* Climbing frame */}
-      <group position={[7.4, 0, 15.5]}>
+      <group position={[6.8, 0, 6.2]}>
         {[-1.4, 1.4].map((x) => (
           <mesh key={x} castShadow position={[x, 1.6, 0]} material={m.woodDark}>
             <boxGeometry args={[0.2, 3.2, 0.2]} />
@@ -140,9 +146,9 @@ export function ExperienceHouse() {
           { args: [1.5, 0.6, 0.2], position: [-5.0, 0.5, 3.8] },
           ...timeline.map((_, i) => ({
             args: [1.5, 0.65, 0.2] as [number, number, number],
-            position: [-6.5 + i * 4.6, 0.65, 12.5] as [number, number, number],
+            position: [-5.2 + i * 5.2, 0.65, 9.2] as [number, number, number],
           })),
-          { args: [1.6, 1.6, 0.2], position: [7.4, 1.6, 15.5] },
+          { args: [1.6, 1.6, 0.2], position: [6.8, 1.6, 6.2] },
         ]}
       />
     </HouseFrame>

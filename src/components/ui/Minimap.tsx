@@ -1,9 +1,8 @@
-import { useEffect, useRef } from 'react'
+﻿import { useEffect, useRef } from 'react'
 import { ISLAND, houses } from '../../data/portfolioData'
 import { playerState } from '../../state/controls'
 import { useGameStore } from '../../store/useGameStore'
 
-const SIZE = 150
 const WORLD_R = ISLAND.boundary + 4
 const DPR = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
 
@@ -11,7 +10,7 @@ const DPR = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio 
  * Canvas minimap. Redraws on rAF straight from `playerState`, so it stays in
  * sync with the character without pushing a single React render.
  */
-export function Minimap() {
+export function Minimap({ size: SIZE = 150 }: { size?: number }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const visited = useGameStore((s) => s.visited)
   const visitedRef = useRef(visited)
@@ -137,7 +136,7 @@ export function Minimap() {
 
     draw()
     return () => cancelAnimationFrame(raf)
-  }, [])
+  }, [SIZE])
 
   return (
     <div className="relative">
@@ -164,3 +163,4 @@ export function Minimap() {
     </div>
   )
 }
+

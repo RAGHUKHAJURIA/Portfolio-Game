@@ -30,6 +30,8 @@ const AIR_ACCEL = 3.5
 const GRAVITY = -24
 const JUMP_V = 8.4
 const TURN_RATE = 12
+/** Hard wall-clock ceiling on the intro, whatever the frame rate. */
+const MAX_DROP_SECONDS = 9
 
 const shortestAngle = (from: number, to: number) => {
   let d = (to - from) % (Math.PI * 2)
@@ -54,6 +56,7 @@ export function Character() {
   const wasGrounded = useRef(true)
   const stepAccum = useRef(0)
   const dropStarted = useRef(false)
+  const dropElapsed = useRef(0)
 
   const phase = useGameStore((s) => s.phase)
   const setPhase = useGameStore((s) => s.setPhase)
@@ -101,6 +104,7 @@ export function Character() {
     playerState.gait = 0
     playerState.speed = 0
     dropStarted.current = true
+    dropElapsed.current = 0
     // Point the camera down the drop line for a wide hero shot.
     cameraOrbit.yaw = Math.atan2(DROP_FROM[0] - DROP_TO[0], DROP_FROM[2] - DROP_TO[1])
     cameraOrbit.pitch = 0.42
@@ -112,12 +116,18 @@ export function Character() {
     const b = body.current
     const ctrl = controller.current
     if (!b) return
-    const dt = Math.min(rawDelta, 1 / 30)
+    // Clamped so a long frame hiccup can't tunnel the capsule through the
+    // world. The drop gets a looser clamp: it's scripted against the height
+    // field rather than swept, so it can't tunnel, and a hard 1/30 cap would
+    // put the whole intro into slow motion on a slow device.
+    const dt = Math.min(rawDelta, phase === 'dropping' ? 0.1 : 1 / 30)
 
     const pos = b.translation()
 
     /* ── Parachute drop: scripted, not simulated ──────────── */
     if (phase === 'dropping' && dropStarted.current) {
+      dropElapsed.current += rawDelta
+
       const underChute = pos.y < CHUTE_ALTITUDE
       const target = underChute ? CHUTE_SPEED : FREEFALL_TERMINAL
       velY.current += (target - velY.current) * Math.min(1, dt * (underChute ? 4.5 : 2.2))
@@ -129,8 +139,11 @@ export function Character() {
       const z = pos.z + (DROP_TO[1] - pos.z) * k
 
       const groundY = terrainHeight(x, z) + FEET_OFFSET
-      let landed = false
-      if (y <= groundY) {
+      // Wall-clock watchdog. However badly the device is performing, the
+      // intro is never allowed to hold the player hostage — put them on the
+      // ground and hand over control.
+      let landed = dropElapsed.current > MAX_DROP_SECONDS
+      if (y <= groundY || landed) {
         y = groundY
         landed = true
       }

@@ -12,9 +12,10 @@ export function ProjectsHouse() {
 
   return (
     <HouseFrame id="projects" labelHeight={9.6}>
-      {/* Concrete apron running out to the door */}
-      <mesh receiveShadow position={[0, 0.09, 5.5]} material={m.tarmac}>
-        <boxGeometry args={[16, 0.18, 12]} />
+      {/* Concrete apron running out to the door. A thick slab sunk into the
+          ground, not a thin sheet — see the note in ExperienceHouse. */}
+      <mesh receiveShadow position={[0, -1.45, 3]} material={m.tarmac}>
+        <boxGeometry args={[17, 3, 14]} />
       </mesh>
 
       {/* Hangar body — long axis on X, bay faces +Z */}

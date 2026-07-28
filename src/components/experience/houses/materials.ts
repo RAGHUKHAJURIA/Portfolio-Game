@@ -29,7 +29,9 @@ export function useBuildMats() {
       dark: mk('#22262a'),
       accent: mk('#f0a92e', 0.45),
       red: mk('#c0392b', 0.6),
-      tarmac: mk('#57544d'),
+      // Light enough to read as gravel against bright grass. Darker than
+      // this and the aprons look like holes cut in the ground.
+      tarmac: mk('#827c6e'),
     }
   }, [])
 }

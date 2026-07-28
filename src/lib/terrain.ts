@@ -58,9 +58,14 @@ function baseHeight(x: number, z: number): number {
   return h * (1 - shore) - shore * SHORE_DEPTH
 }
 
-/** Flat pad radius around each building. */
-const PAD_INNER = 7.5
-const PAD_OUTER = 13
+/**
+ * Flat pad around each building. `PAD_INNER` has to comfortably exceed the
+ * radius each house scatters its aprons and props over — everything inside a
+ * house component is authored at local y = 0, so any prop sitting outside the
+ * flattened zone floats or sinks. `scripts/smoke.ts` asserts this.
+ */
+const PAD_INNER = 10.5
+const PAD_OUTER = 16.5
 
 const PADS = houses.map((h) => ({
   x: h.position[0],

@@ -214,10 +214,11 @@ export function Hud() {
           {/* Bottom-left minimap */}
           <div
             className={`pointer-events-auto absolute left-4 ${
-              isMobile ? 'bottom-[10.5rem]' : 'bottom-4'
+              isMobile ? 'bottom-[11.5rem]' : 'bottom-4'
             }`}
           >
-            <Minimap />
+            {/* 150px eats 38% of a 390px-wide phone — scale it down there. */}
+            <Minimap size={isMobile ? 108 : 150} />
           </div>
 
           {/* Bottom-right controls */}

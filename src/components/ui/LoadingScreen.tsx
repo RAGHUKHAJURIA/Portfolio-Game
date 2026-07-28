@@ -97,7 +97,7 @@ export function LoadingScreen() {
             <rect width="100%" height="100%" fill="url(#grid)" />
           </svg>
 
-          <div className="relative flex w-full max-w-xl flex-col items-center px-6">
+          <div className="relative flex w-full max-w-2xl flex-col items-center px-6">
             <motion.div
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}

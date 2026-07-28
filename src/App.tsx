@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
 import { AdaptiveDpr, PerformanceMonitor, Preload } from '@react-three/drei'
@@ -16,6 +16,8 @@ import { InteractionPrompt } from './components/ui/InteractionPrompt'
 import { SectionModal } from './components/ui/SectionModal'
 import { MobileControls } from './components/ui/MobileControls'
 import { DropOverlay } from './components/ui/DropOverlay'
+import { FallbackShell } from './components/ui/FallbackShell'
+import { hasWebGL } from './lib/webgl'
 
 import { useKeyboardControls } from './hooks/useKeyboardControls'
 import { usePointerLook } from './hooks/usePointerLook'
@@ -63,6 +65,24 @@ export default function App() {
   // modal. The last frame stays on screen as the backdrop. Every useFrame in
   // the scene clamps its delta, so the jump on resume is harmless.
   const paused = useGameStore((s) => s.activeHouse !== null)
+
+  // Probed once. Without WebGL the island can never start, so serve the same
+  // content as a plain document rather than stranding the visitor on a
+  // loading screen that will never finish.
+  const [webgl] = useState(hasWebGL)
+  const setReducedMode = useGameStore((s) => s.setReducedMode)
+  useEffect(() => {
+    setReducedMode(!webgl)
+  }, [webgl, setReducedMode])
+
+  if (!webgl) {
+    return (
+      <div className="relative h-full w-full overflow-hidden bg-steel-900">
+        <FallbackShell />
+        <SectionModal />
+      </div>
+    )
+  }
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-steel-900">
