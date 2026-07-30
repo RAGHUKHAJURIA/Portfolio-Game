@@ -182,18 +182,52 @@ same object.
 
 ## Deploying to Vercel
 
-`vercel.json` is already configured (Vite preset, `dist` output, immutable
-caching on hashed assets).
+Everything is configured. `vercel.json` sets the Vite preset, `dist` output,
+immutable caching on hashed assets, shorter caching on the social card and
+resume, and a few baseline security headers.
 
 ```bash
-npm i -g vercel
-vercel        # preview
-vercel --prod # production
+npx vercel          # preview deployment
+npx vercel --prod   # production
 ```
 
-Or point Vercel at the Git repo — it will detect Vite and need no
-configuration. Update the `og:image` / `twitter:image` URLs in `index.html` if
-you want absolute URLs for link previews on some platforms.
+Or connect the Git repo in the Vercel dashboard — it detects Vite and needs no
+further configuration. Pushes to `main` then deploy automatically.
+
+### Link previews
+
+`og:image` points at `public/og.png`, **not** the SVG. No major link scraper —
+Facebook, LinkedIn, X, Slack, WhatsApp, iMessage — renders SVG, so an SVG card
+means a blank preview everywhere the link actually gets shared.
+
+Scrapers also cannot resolve a relative URL, so `og:image`, `og:url` and
+`canonical` are made absolute at build time by the `absoluteUrls` plugin in
+`vite.config.ts`. The origin comes from Vercel's own
+`VERCEL_PROJECT_PRODUCTION_URL`, which is set automatically and is the stable
+production domain rather than the per-deployment URL — so **no configuration is
+needed for the default `*.vercel.app` domain**.
+
+If you add a custom domain, set `SITE_URL` in the Vercel project's environment
+variables (e.g. `https://raghu.dev`) and it takes precedence.
+
+Regenerate the card and icons after editing `public/og.svg`:
+
+```bash
+node scripts/make-images.mjs
+```
+
+### Before you ship
+
+```bash
+npm run verify   # types, invariants, build, link check, browser walkthrough
+npm run links    # just the link + resume check (seconds, no browser)
+```
+
+`npm run links` is worth running any time `portfolioData.ts` changes: it walks
+every outbound URL and pulls `/resume.pdf` off a real built preview, which is
+the only way to catch a resume that works in `vite dev` and 404s in production.
+LinkedIn and LeetCode are reported as `BLOCK` rather than `FAIL` — they refuse
+non-browser requests, which is not the same as being broken.
 
 ---
 

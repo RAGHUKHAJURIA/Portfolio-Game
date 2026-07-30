@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+
+# Link-preview scrapers must be able to reach the social card and the resume.
+Allow: /og.png
+Allow: /resume.pdf

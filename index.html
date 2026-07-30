@@ -2,23 +2,41 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#14181d" />
+
+    <!-- SVG for browsers that take it, PNG for the ones that don't (Safari,
+         older Android) and for the iOS home-screen icon. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <title>Raghu Khajuria — Drop Zone Portfolio</title>
     <meta
       name="description"
       content="An interactive 3D battle-royale island portfolio. Drop in, explore the island, and loot each building to unlock a section of my work."
     />
+    <!-- og:image is rewritten to an absolute URL at build time, and canonical
+         and og:url are injected, by the absoluteUrls plugin in vite.config.ts.
+         A link scraper cannot resolve a relative path, so shipping these as-is
+         means no preview card anywhere the link gets shared. PNG rather than
+         SVG for the same class of reason: no major scraper renders SVG.
 
+         canonical deliberately is NOT written here as href="/": Vite treats
+         link[href] as an asset reference and tries to read "/" as a file,
+         which fails the build with EISDIR. -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Raghu Khajuria" />
     <meta property="og:title" content="Raghu Khajuria — Drop Zone Portfolio" />
     <meta
       property="og:description"
       content="An interactive 3D battle-royale island portfolio. Drop in, explore the island, and loot each building to unlock a section of my work."
     />
-    <meta property="og:image" content="/og.svg" />
+    <meta property="og:image" content="/og.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Drop Zone Portfolio — a top-down island map with five marked buildings." />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Raghu Khajuria — Drop Zone Portfolio" />
@@ -26,7 +44,7 @@
       name="twitter:description"
       content="An interactive 3D battle-royale island portfolio. Drop in, explore, and loot each building to unlock a section of my work."
     />
-    <meta name="twitter:image" content="/og.svg" />
+    <meta name="twitter:image" content="/og.png" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -38,5 +56,20 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- The island needs JavaScript and WebGL. The in-app FallbackShell covers
+         "JS ran but WebGL is unavailable"; this covers the case where nothing
+         ran at all, so a crawler or a locked-down browser still gets the
+         resume and an email address rather than a blank page. -->
+    <noscript>
+      <div style="padding: 2rem; font-family: system-ui; color: #e8e2d2; background: #14181d">
+        <h1>Raghu Khajuria — Portfolio</h1>
+        <p>
+          This portfolio is an interactive 3D scene and needs JavaScript. You can still
+          <a href="/resume.pdf" style="color: #f0a92e">download my resume</a>, or reach me at
+          <a href="mailto:khajuriaraghu41@gmail.com" style="color: #f0a92e">khajuriaraghu41@gmail.com</a>.
+        </p>
+      </div>
+    </noscript>
   </body>
 </html>

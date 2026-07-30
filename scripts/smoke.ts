@@ -239,6 +239,30 @@ check('5 houses', houses.length === 5)
 // build even though it works in the dev server, which is exactly the kind of
 // break nobody notices until someone tries to download it.
 check('resume.pdf is in public/', existsSync(new URL('../public/resume.pdf', import.meta.url)))
+
+console.log('\n--- deploy readiness ---')
+const asset = (f: string) => existsSync(new URL(`../public/${f}`, import.meta.url))
+for (const f of ['og.png', 'favicon.svg', 'favicon-96.png', 'apple-touch-icon.png', 'robots.txt']) {
+  check(`  public/${f} exists`, asset(f))
+}
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
+    .replace(/<!--[\s\S]*?-->/g, '') // the comments discuss these tags too
+  // No major link scraper renders SVG, so an SVG card is a blank preview
+  // everywhere the link is shared.
+  check('og:image is a PNG, not an SVG', /property="og:image" content="[^"]*\.png"/.test(html))
+  check('twitter:image is a PNG', /name="twitter:image" content="[^"]*\.png"/.test(html))
+  check('og:image dimensions are declared', /og:image:width" content="1200"/.test(html))
+  // canonical/og:url are injected at build time, not written here: Vite reads
+  // link[href] as an asset path and a bare href="/" fails the build outright.
+  // check-links.mjs asserts they land in the built HTML.
+  check('no bare root href that vite would treat as an asset', !/href="\/"/.test(html))
+  const cfg = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8')
+  check('build injects canonical + og:url', /rel="canonical"/.test(cfg) && /og:url/.test(cfg))
+  // Without JS the page is an empty div; crawlers and locked-down browsers
+  // should still find a way to reach a human.
+  check('noscript fallback offers the resume', /<noscript>[\s\S]*resume\.pdf/.test(html))
+}
 check('resumeUrl points at it', profile.resumeUrl === '/resume.pdf')
 check(
   'contact channels are absolute URLs or mailto',

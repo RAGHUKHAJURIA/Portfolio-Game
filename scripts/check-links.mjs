@@ -95,7 +95,25 @@ const note = (label, url, r) => {
   else if (!r.ok) failures.push(`${label} -> ${r.status} ${url}`)
 }
 
-console.log('--- resume, from the built preview ---')
+console.log('--- built index.html ---')
+{
+  const html = await (await fetch(base, { signal: AbortSignal.timeout(10000) })).text()
+  const abs = /property="og:image" content="https:\/\/[^"]+\/og\.png"/.test(html)
+  const canon = /rel="canonical" href="https:\/\/[^"]+"/.test(html)
+  if (process.env.SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    console.log(`${abs ? 'PASS' : 'FAIL'}  og:image is absolute`)
+    console.log(`${canon ? 'PASS' : 'FAIL'}  canonical injected`)
+    if (!abs) failures.push('og:image is still relative in the built HTML')
+    if (!canon) failures.push('canonical missing from the built HTML')
+  } else {
+    // Without an origin the tags stay relative on purpose. On Vercel the
+    // platform supplies VERCEL_PROJECT_PRODUCTION_URL, so this only ever
+    // shows up on a bare local build.
+    console.log('NOTE  no SITE_URL / VERCEL_PROJECT_PRODUCTION_URL — og tags stay relative')
+  }
+}
+
+console.log('\n--- resume, from the built preview ---')
 const resume = await fetch(`${base}${profile.resumeUrl}`, { signal: AbortSignal.timeout(10000) })
 const ctype = resume.headers.get('content-type') ?? ''
 const bytes = Number(resume.headers.get('content-length') ?? 0)
