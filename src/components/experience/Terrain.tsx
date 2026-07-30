@@ -5,7 +5,13 @@ import { ISLAND } from '../../data/portfolioData'
 import { groundColor, terrainHeight } from '../../lib/terrain'
 import { tiled } from '../../lib/textures'
 
-const SEGMENTS = 72
+/**
+ * 128 segments over the 372-unit mesh puts a vertex every ~2.9 units and makes
+ * a ~33k-triangle trimesh collider. Keeping the old ~1.7-unit spacing at this
+ * size would have been 93k triangles, all of which Rapier has to build a BVH
+ * over at load; chunkier facets also suit the low-poly look.
+ */
+const SEGMENTS = 128
 const SIZE = ISLAND.half * 2
 /** Gentle — the terrain silhouette is the art, this is just grain on top. */
 const NORMAL_SCALE = new Vector2(0.55, 0.55)

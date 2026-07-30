@@ -44,17 +44,25 @@ export function useKeyboardControls() {
       const store = useGameStore.getState()
 
       if (e.code === 'Escape') {
-        if (store.activeHouse) {
+        if (store.mapOpen) store.closeMap()
+        else if (store.activeHouse) {
           if (store.subIndex !== null) store.setSubIndex(null)
           else store.closeHouse()
         }
         return
       }
 
-      // While a panel is open the arrow keys and space belong to the panel's
-      // scroll container, and in reduced mode they belong to the page — so
-      // only swallow them when there's actually an island to walk around.
-      if (store.activeHouse !== null || store.reducedMode) return
+      // M toggles the full map, and has to be handled before the freeze check
+      // below or it could open the map but never close it.
+      if (e.code === 'KeyM' && !store.reducedMode && store.phase === 'playing') {
+        store.toggleMap()
+        return
+      }
+
+      // While a panel or the map is open the arrow keys and space belong to the
+      // overlay's scroll container, and in reduced mode they belong to the page
+      // — so only swallow them when there's an island to walk around.
+      if (store.activeHouse !== null || store.mapOpen || store.reducedMode) return
       if (BLOCK_SCROLL.has(e.code)) e.preventDefault()
 
       if (store.phase === 'ready' && (e.code === 'Space' || e.code === 'Enter')) {
@@ -88,9 +96,9 @@ export function useKeyboardControls() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
 
-    // Dropping the panel should never leave a key stuck down.
+    // Opening or closing an overlay should never leave a key stuck down.
     const unsub = useGameStore.subscribe((s, prev) => {
-      if (s.activeHouse !== prev.activeHouse) {
+      if (s.activeHouse !== prev.activeHouse || s.mapOpen !== prev.mapOpen) {
         held.clear()
         resetInput()
       }

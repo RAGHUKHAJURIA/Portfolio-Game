@@ -1,5 +1,6 @@
 ﻿import { useEffect, useRef } from 'react'
 import { ISLAND, houses } from '../../data/portfolioData'
+import { INLETS, PATH_SEGMENTS } from '../../lib/terrain'
 import { playerState } from '../../state/controls'
 import { useGameStore } from '../../store/useGameStore'
 
@@ -15,6 +16,18 @@ export function Minimap({ size: SIZE = 150 }: { size?: number }) {
   const visited = useGameStore((s) => s.visited)
   const visitedRef = useRef(visited)
   visitedRef.current = visited
+
+  // A pin the player can't see while walking is a pin that does nothing, so it
+  // has to appear here too, not just on the full map. Read through a ref: the
+  // draw loop runs on rAF and must not be rebuilt when the pin moves.
+  const pinRef = useRef(useGameStore.getState().pin)
+  useEffect(
+    () =>
+      useGameStore.subscribe((s) => {
+        pinRef.current = s.pin
+      }),
+    []
+  )
 
   useEffect(() => {
     const cv = canvas.current
@@ -51,14 +64,24 @@ export function Minimap({ size: SIZE = 150 }: { size?: number }) {
       ctx.fillStyle = '#576636'
       ctx.fill()
 
-      // Trails from the plaza to each building
+      // Water inlets, before the roads so a road never appears to cross one.
+      ctx.fillStyle = '#16323d'
+      for (const m of INLETS) {
+        ctx.beginPath()
+        // The visible water reaches roughly where the mound clears sea level,
+        // which is well inside its full falloff radius.
+        ctx.arc(toX(m.x), toY(m.z), m.r * 0.72 * k, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      // The road network, straight from the terrain so the two never disagree.
       ctx.strokeStyle = 'rgba(150,124,84,0.7)'
       ctx.lineWidth = 2.5
       ctx.lineCap = 'round'
-      for (const h of houses) {
+      for (const [ax, az, bx, bz] of PATH_SEGMENTS) {
         ctx.beginPath()
-        ctx.moveTo(toX(0), toY(2))
-        ctx.lineTo(toX(h.position[0] + h.markerOffset[0]), toY(h.position[1] + h.markerOffset[1]))
+        ctx.moveTo(toX(ax), toY(az))
+        ctx.lineTo(toX(bx), toY(bz))
         ctx.stroke()
       }
 
@@ -99,6 +122,27 @@ export function Minimap({ size: SIZE = 150 }: { size?: number }) {
           ctx.lineTo(hx + 2.2, hy - 1.8)
           ctx.stroke()
         }
+      }
+
+      // Dropped pin
+      const pin = pinRef.current
+      if (pin) {
+        const gx = toX(pin[0])
+        const gy = toY(pin[1])
+        ctx.beginPath()
+        ctx.moveTo(gx, gy)
+        ctx.lineTo(gx - 3.4, gy - 8)
+        ctx.lineTo(gx + 3.4, gy - 8)
+        ctx.closePath()
+        ctx.fillStyle = '#f0a92e'
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(gx, gy - 9.5, 3.2, 0, Math.PI * 2)
+        ctx.fillStyle = '#f0a92e'
+        ctx.fill()
+        ctx.strokeStyle = '#0d1014'
+        ctx.lineWidth = 1
+        ctx.stroke()
       }
 
       // Player

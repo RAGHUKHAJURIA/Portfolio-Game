@@ -36,9 +36,17 @@ const cap = (n: number) => Math.max(1, n)
  * Batch-level culling never fires for a batch that spans the whole island
  * anyway, so switching it off costs nothing. `scripts/smoke.ts` pins the
  * three.js behaviour this works around.
+ *
+ * `frames={2}` is the other half of the wrapper's job. By default `<Instances>`
+ * recomposes every child's matrix and re-uploads the whole instanceMatrix
+ * buffer every single frame. Across the ~6000 props on the enlarged island
+ * that is megabytes of pointless upload per frame for scenery that never
+ * moves. Two frames is enough: the children subscribe from a layout effect, so
+ * the first frame can still see an empty list, and the re-render that follows
+ * resets the counter and catches the full set.
  */
 function Batch(props: ComponentProps<typeof Instances>) {
-  return <Instances frustumCulled={false} {...props} />
+  return <Instances frustumCulled={false} frames={2} {...props} />
 }
 
 /* ── Vegetation ─────────────────────────────────────────── */
@@ -335,6 +343,85 @@ function Debris() {
   )
 }
 
+/**
+ * Landmarks. Pure atmosphere — no triggers, no content, nothing to interact
+ * with. They exist so the enlarged island has something to navigate by and
+ * something to walk toward that isn't one of the five compounds.
+ */
+function Landmarks() {
+  const tower = terrainHeight(-104, -84)
+  const cargo = terrainHeight(96, 96)
+
+  return (
+    <>
+      {/* Watchtower — four splayed legs, a caged platform, a shallow roof. */}
+      <RigidBody type="fixed" colliders={false} position={[-104, tower, -84]} rotation={[0, 0.6, 0]}>
+        {[
+          [-1, -1],
+          [1, -1],
+          [-1, 1],
+          [1, 1],
+        ].map(([sx, sz], i) => (
+          <mesh
+            key={i}
+            castShadow
+            position={[sx * 2.1, 5, sz * 2.1]}
+            rotation={[sz * 0.06, 0, -sx * 0.06]}
+          >
+            <boxGeometry args={[0.34, 10, 0.34]} />
+            <meshStandardMaterial color="#5b4a30" roughness={1} flatShading />
+          </mesh>
+        ))}
+        {/* Cross-bracing, the thing that makes it read as a tower and not posts */}
+        {[2.4, 5.2, 7.8].map((y) => (
+          <mesh key={y} position={[0, y, 0]}>
+            <boxGeometry args={[4.7, 0.18, 4.7]} />
+            <meshStandardMaterial color="#4e3d28" roughness={1} flatShading />
+          </mesh>
+        ))}
+        <mesh castShadow receiveShadow position={[0, 10.1, 0]}>
+          <boxGeometry args={[5.6, 0.3, 5.6]} />
+          <meshStandardMaterial color="#6d5638" roughness={1} flatShading />
+        </mesh>
+        {[
+          [0, -2.7],
+          [0, 2.7],
+          [-2.7, 0],
+          [2.7, 0],
+        ].map(([px, pz], i) => (
+          <mesh key={i} position={[px, 10.8, pz]}>
+            <boxGeometry args={[px === 0 ? 5.6 : 0.16, 1.1, pz === 0 ? 5.6 : 0.16]} />
+            <meshStandardMaterial color="#4e3d28" roughness={1} flatShading />
+          </mesh>
+        ))}
+        <mesh castShadow position={[0, 13.4, 0]} rotation={[0, Math.PI / 4, 0]}>
+          <coneGeometry args={[4.6, 1.7, 4]} />
+          <meshStandardMaterial color="#46504a" roughness={0.9} flatShading />
+        </mesh>
+        <CuboidCollider args={[2.6, 5.2, 2.6]} position={[0, 5.2, 0]} />
+      </RigidBody>
+
+      {/* Downed cargo crate, half-buried, chute still tangled on it. */}
+      <RigidBody type="fixed" colliders={false} position={[96, cargo, 96]} rotation={[0.1, -0.8, 0.05]}>
+        <mesh castShadow receiveShadow position={[0, 1.1, 0]}>
+          <boxGeometry args={[5, 2.4, 3.4]} />
+          <meshStandardMaterial color="#8a5a3c" roughness={0.95} flatShading />
+        </mesh>
+        <mesh position={[0, 1.1, 1.73]}>
+          <boxGeometry args={[4.4, 1.9, 0.08]} />
+          <meshStandardMaterial color="#f0a92e" roughness={0.7} flatShading />
+        </mesh>
+        {/* Collapsed canopy draped over the top */}
+        <mesh castShadow position={[-0.6, 2.5, -0.4]} rotation={[0.3, 0.4, -0.2]}>
+          <sphereGeometry args={[2.5, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2.6]} />
+          <meshStandardMaterial color="#c9ccc4" roughness={0.95} side={2} flatShading />
+        </mesh>
+        <CuboidCollider args={[2.5, 1.2, 1.7]} position={[0, 1.1, 0]} />
+      </RigidBody>
+    </>
+  )
+}
+
 export function Props() {
   return (
     <>
@@ -346,6 +433,7 @@ export function Props() {
       <BoundaryPosts />
       <DropPlaza />
       <Debris />
+      <Landmarks />
     </>
   )
 }

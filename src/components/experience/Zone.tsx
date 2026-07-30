@@ -7,8 +7,15 @@ import { useGameStore } from '../../store/useGameStore'
 
 const CYCLE = 95
 const R_MAX = ISLAND.boundary - 1
-const R_MIN = 15
-const WALL_HEIGHT = 30
+/**
+ * The circle must never contract inside a compound. Houses now sit at radius
+ * 62–86 with door markers out to 89, and a wall sweeping across an approach
+ * washes half the screen pale blue with a hard edge through it. Staying out
+ * past everything reads better anyway — it's a distant boundary, not a filter
+ * over the play area.
+ */
+const R_MIN = 104
+const WALL_HEIGHT = 48
 
 /**
  * Decoration only — a blue play-zone wall that slowly contracts and resets.
@@ -36,8 +43,10 @@ export function Zone() {
       colors[i * 4] = 0.25
       colors[i * 4 + 1] = 0.66
       colors[i * 4 + 2] = 0.96
-      // Brightest just above the ground, gone well before the top edge.
-      colors[i * 4 + 3] = Math.pow(1 - t, 2.6) * 0.55
+      // Brightest just above the ground, gone well before the top edge. Peak
+      // came down from 0.55 with the island: the wall is ~3x wider now, and
+      // additive blending over that much screen was washing the scene out.
+      colors[i * 4 + 3] = Math.pow(1 - t, 2.6) * 0.38
     }
     g.setAttribute('color', new BufferAttribute(colors, 4))
     return g
@@ -51,6 +60,8 @@ export function Zone() {
     const eased = contract * contract * (3 - 2 * contract)
     const r = R_MAX - (R_MAX - R_MIN) * eased
     // The centre drifts a little so it doesn't always close on the plaza.
+    // Small enough that the drift can't push the wall onto the contact
+    // compound, whose door marker reaches radius 89.
     const cx = Math.sin(clock.elapsedTime * 0.05) * 6
     const cz = Math.cos(clock.elapsedTime * 0.037) * 6
 
@@ -58,7 +69,7 @@ export function Zone() {
       wall.current.scale.set(r, 1, r)
       wall.current.position.set(cx, ISLAND.seaLevel + WALL_HEIGHT / 2, cz)
       const mat = wall.current.material as MeshBasicMaterial
-      mat.opacity = 0.16 + (1 - eased) * 0.05
+      mat.opacity = 0.1 + (1 - eased) * 0.04
     }
     if (ring.current) {
       ring.current.scale.set(r, r, 1)

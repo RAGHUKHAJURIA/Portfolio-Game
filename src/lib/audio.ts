@@ -175,6 +175,27 @@ export const playClose = () => tone(520, 0.14, 0.05, 'triangle', 300)
 
 export const playClick = () => tone(1100, 0.045, 0.05, 'square', 900)
 
+/**
+ * Gunshot: a hard noise crack over a short low thump, deliberately quiet.
+ * A portfolio should not blast a recruiter's laptop, and the HUD mute toggle
+ * covers the rest.
+ */
+export const playShot = () => {
+  burst({ freq: 2000, q: 0.35, dur: 0.09, gain: 0.16, type: 'highpass' })
+  burst({ freq: 180, q: 0.6, dur: 0.16, gain: 0.13, type: 'lowpass' })
+  tone(150, 0.09, 0.05, 'square', 60)
+}
+
+/** Metallic ping on a target hit — the reward sound, so it reads clearly. */
+export const playHit = () => {
+  tone(1560, 0.11, 0.06, 'square', 2300)
+  setTimeout(() => tone(2100, 0.09, 0.035, 'sine'), 35)
+}
+
+/** Dull thud for a shot that hit scenery rather than a target. */
+export const playImpact = () =>
+  burst({ freq: 420, q: 0.8, dur: 0.11, gain: 0.09, type: 'lowpass' })
+
 export const playDrop = () => {
   tone(120, 1.2, 0.1, 'sawtooth', 60)
   burst({ freq: 700, q: 0.4, dur: 1.6, gain: 0.18, type: 'lowpass' })

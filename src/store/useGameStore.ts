@@ -24,6 +24,13 @@ type GameState = {
   muted: boolean
   /** No WebGL — the island never runs and the panels are served as a document. */
   reducedMode: boolean
+  /** Full-screen map overlay is up. Freezes the player, same as a panel. */
+  mapOpen: boolean
+  /** Player-dropped map pin, world [x, z]. Not persisted across reloads. */
+  pin: [number, number] | null
+  /** Range scoreboard. Bonus-area only — nothing gates portfolio content. */
+  shots: number
+  hits: number
 
   setPhase: (p: Phase) => void
   setProgress: (p: number) => void
@@ -35,6 +42,11 @@ type GameState = {
   setReducedMode: (r: boolean) => void
   markMoved: () => void
   toggleMute: () => void
+  toggleMap: () => void
+  closeMap: () => void
+  setPin: (p: [number, number] | null) => void
+  registerShot: () => void
+  registerHit: () => void
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -48,6 +60,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   visited: {},
   muted: false,
   reducedMode: false,
+  mapOpen: false,
+  pin: null,
+  shots: 0,
+  hits: 0,
 
   setPhase: (phase) => set({ phase }),
   setProgress: (progress) => set({ progress }),
@@ -68,10 +84,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!get().hasMoved) set({ hasMoved: true })
   },
   toggleMute: () => set((s) => ({ muted: !s.muted })),
+  // The map is only ever reachable from gameplay; opening it over a content
+  // panel would stack two full-screen overlays.
+  toggleMap: () =>
+    set((s) => (s.activeHouse !== null ? s : { mapOpen: !s.mapOpen })),
+  closeMap: () => set({ mapOpen: false }),
+  setPin: (pin) => set({ pin }),
+  registerShot: () => set((s) => ({ shots: s.shots + 1 })),
+  registerHit: () => set((s) => ({ hits: s.hits + 1 })),
 }))
 
-/** True when the character should ignore input (panel open, not playing yet). */
+/** True when the character should ignore input (panel or map open, not playing yet). */
 export const isInputFrozen = () => {
   const s = useGameStore.getState()
-  return s.activeHouse !== null || s.phase !== 'playing'
+  return s.activeHouse !== null || s.mapOpen || s.phase !== 'playing'
 }

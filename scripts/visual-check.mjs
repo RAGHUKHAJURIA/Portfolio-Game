@@ -176,11 +176,115 @@ await shot('06-sprinting')
 await page.keyboard.up('ShiftLeft')
 await page.keyboard.up('KeyW')
 
+// Full map: M opens, clicking drops a pin, Escape returns to gameplay.
+await page.keyboard.press('KeyM')
+const mapPanel = page.getByRole('dialog', { name: /tactical map/i })
+await mapPanel.waitFor({ state: 'visible', timeout: 60000 })
+await wait(900)
+await shot('14-fullmap')
+
+const mapCanvas = mapPanel.locator('canvas')
+const mapBox = await mapCanvas.boundingBox()
+await mapCanvas.click({ position: { x: mapBox.width * 0.34, y: mapBox.height * 0.3 } })
+await wait(700)
+await shot('15-fullmap-pin')
+
+await page.keyboard.press('Escape')
+await mapPanel.waitFor({ state: 'detached', timeout: 30000 }).catch(() => {})
+await page.locator('button[title="Open ABOUT"]').waitFor({ state: 'visible', timeout: 30000 })
+// Second M must reopen, and a second press must close again — the freeze check
+// runs before movement keys, so a one-way toggle would trap the player.
+await page.keyboard.press('KeyM')
+await mapPanel.waitFor({ state: 'visible', timeout: 30000 })
+await page.keyboard.press('KeyM')
+await mapPanel.waitFor({ state: 'detached', timeout: 30000 }).catch(() => {})
+const hudBack = await page.locator('button[title="Open ABOUT"]').isVisible()
+if (!hudBack) errors.push('HUD did not come back after closing the full map')
+console.log(`Full map opened, pinned and closed. HUD restored: ${hudBack}`)
+await wait(500)
+
 // Jump.
 await page.keyboard.press('Space')
 await wait(340)
 await shot('07-jump')
 await wait(1400)
+
+/**
+ * Walkable interior. The content trigger moved indoors and onto the upper
+ * floor, so this checks the thing that can actually break: a proximity test
+ * that ignores height would fire the panel from the ground floor, directly
+ * underneath the object, and nobody would ever need the stairs.
+ */
+// The About house sits at (0, -62) unrotated with its corkboard at local
+// (2.2, -3.4), so both floors share world XZ (2.2, -65.4). Each teleport lands
+// a little above its floor and lets gravity settle, rather than pinning an
+// exact Y the terrain could move out from under.
+const CORK_X = 2.2
+const CORK_Z = -65.4
+
+await page.evaluate(([x, z]) => window.__tp && window.__tp(x, 7.4, z), [CORK_X, CORK_Z])
+await wait(1600)
+const promptDownstairs = await page.getByTestId('interact-prompt').isVisible().catch(() => false)
+await shot('16-interior-ground')
+
+// Upper floor, same spot: now it must.
+await page.evaluate(([x, z]) => window.__tp && window.__tp(x, 10.6, z), [CORK_X, CORK_Z])
+await wait(1600)
+const promptUpstairs = await page.getByTestId('interact-prompt').isVisible().catch(() => false)
+await shot('17-interior-upper')
+
+console.log(`Interior prompt — ground floor: ${promptDownstairs}, upper floor: ${promptUpstairs}`)
+if (promptDownstairs) errors.push('content prompt fires from the ground floor — the height check is not working')
+if (!promptUpstairs) errors.push('content prompt does not fire on the upper floor next to the object')
+
+if (promptUpstairs) {
+  await page.keyboard.press('KeyE')
+  await page.getByRole('dialog').waitFor({ state: 'visible', timeout: 30000 })
+  await wait(700)
+  await shot('18-interior-panel')
+  await page.keyboard.press('Escape')
+  await page.locator('button[title="Open ABOUT"]').waitFor({ state: 'visible', timeout: 30000 })
+  console.log('Opened the About panel from inside the building.')
+}
+
+/**
+ * Shooting range. The firing line is at world (92, 18) + z ≈ 5, and the
+ * targets run away down −Z, so facing the player that way and holding right
+ * mouse puts a plate under the crosshair.
+ */
+await page.evaluate(() => window.__tp && window.__tp(92, 10, 23))
+await wait(2000)
+await shot('19-range')
+
+const beforeShots = await page.evaluate(() => document.body.innerText.includes('RANGE'))
+void beforeShots
+
+// Aim down the lanes: yaw 0 looks toward −Z with the camera behind the player.
+await page.mouse.move(cx, cy)
+await page.mouse.down({ button: 'right' })
+await wait(900)
+await shot('20-aiming')
+
+for (let i = 0; i < 4; i++) {
+  await page.mouse.down({ button: 'left' })
+  await page.mouse.up({ button: 'left' })
+  await wait(450)
+}
+await wait(700)
+await shot('21-firing')
+await page.mouse.up({ button: 'right' })
+await wait(600)
+
+const score = await page.evaluate(() => {
+  const el = [...document.querySelectorAll('[data-ui]')].find((n) => /range/i.test(n.textContent))
+  return el ? el.textContent.replace(/\s+/g, ' ').trim() : null
+})
+console.log(`Range scoreboard: ${score ?? 'not shown'}`)
+if (!score) errors.push('firing produced no scoreboard — the weapon never registered a shot')
+
+// Back to the plaza for the rest of the run.
+await page.evaluate(() => window.__tp && window.__tp(0, 6, 9))
+await wait(900)
 
 // Open every section from the objective tracker.
 for (const label of ['ABOUT', 'PROJECTS', 'SKILLS', 'EXPERIENCE', 'CONTACT']) {

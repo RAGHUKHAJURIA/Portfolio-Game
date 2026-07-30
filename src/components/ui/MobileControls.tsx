@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { input } from '../../state/controls'
-import { useGameStore } from '../../store/useGameStore'
+import { useGameStore, isInputFrozen } from '../../store/useGameStore'
 import { playClick } from '../../lib/audio'
 
 const BASE = 116
@@ -46,8 +46,7 @@ function Joystick() {
 
     const onDown = (e: PointerEvent) => {
       if (active.current !== null) return
-      const store = useGameStore.getState()
-      if (store.activeHouse !== null || store.phase !== 'playing') return
+      if (isInputFrozen()) return
       active.current = e.pointerId
       const r = el.getBoundingClientRect()
       origin.current = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
@@ -159,10 +158,11 @@ export function MobileControls() {
   const isMobile = useGameStore((s) => s.isMobile)
   const phase = useGameStore((s) => s.phase)
   const activeHouse = useGameStore((s) => s.activeHouse)
+  const mapOpen = useGameStore((s) => s.mapOpen)
   const nearHouse = useGameStore((s) => s.nearHouse)
   const openHouse = useGameStore((s) => s.openHouse)
 
-  if (!isMobile || phase !== 'playing' || activeHouse !== null) return null
+  if (!isMobile || phase !== 'playing' || activeHouse !== null || mapOpen) return null
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 select-none safe-b">
@@ -171,18 +171,48 @@ export function MobileControls() {
           <Joystick />
         </div>
 
-        <div className="pointer-events-auto flex items-end gap-3">
-          <ActionButton label="JUMP" onPress={() => (input.jump = true)} size={56} />
-          <ActionButton
-            label={nearHouse ? 'ENTER' : '—'}
-            accent={nearHouse ? '#f0a92e' : undefined}
-            size={72}
-            onPress={() => {
-              if (!nearHouse) return
-              playClick()
-              openHouse(nearHouse)
-            }}
-          />
+        <div className="pointer-events-auto flex flex-col items-end gap-3">
+          {/* Aim is a hold, so it needs up/cancel as well as down — the shared
+              ActionButton only fires on press. */}
+          <div className="flex items-end gap-3">
+            <button
+              data-ui
+              onPointerDown={(e) => {
+                e.preventDefault()
+                input.aim = true
+              }}
+              onPointerUp={() => (input.aim = false)}
+              onPointerCancel={() => (input.aim = false)}
+              onPointerLeave={() => (input.aim = false)}
+              className="flex h-[52px] w-[52px] touch-none items-center justify-center rounded-full
+                         border-2 border-white/35 bg-black/35 font-stencil text-[11px] uppercase
+                         tracking-[0.12em] text-white/80 backdrop-blur-sm transition-transform active:scale-90"
+            >
+              AIM
+            </button>
+            <ActionButton
+              label="FIRE"
+              accent="#e05c5c"
+              size={58}
+              onPress={() => {
+                input.firePressed = true
+              }}
+            />
+          </div>
+
+          <div className="flex items-end gap-3">
+            <ActionButton label="JUMP" onPress={() => (input.jump = true)} size={56} />
+            <ActionButton
+              label={nearHouse ? 'OPEN' : '—'}
+              accent={nearHouse ? '#f0a92e' : undefined}
+              size={72}
+              onPress={() => {
+                if (!nearHouse) return
+                playClick()
+                openHouse(nearHouse)
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>

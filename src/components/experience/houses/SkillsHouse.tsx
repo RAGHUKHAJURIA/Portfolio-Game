@@ -1,99 +1,135 @@
 import { Barrel, Colliders, Crate, HouseFrame, Sandbags, useBuildMats } from './parts'
+import { HouseInterior, IN_X, IN_Z, UPPER_H, UPPER_Y } from './HouseInterior'
 import { loadout } from '../../../data/portfolioData'
 
+const OUT_X = IN_X + 0.3
+const OUT_Z = IN_Z + 0.3
+const EAVE = UPPER_Y + UPPER_H + 0.25
+
 /**
- * House 3 — the armory: a canvas field tent over a hard frame, with weapon
- * racks and ammo crates. One rack post per loadout slot.
+ * House 3 — the armory: a sandbagged concrete blockhouse under a canvas
+ * awning, with weapon racks flanking the entrance. The old field tent could
+ * not be made two-storey and walk-in, so the canvas moved to the awning and
+ * the building underneath became a blockhouse. The loadout board upstairs is
+ * what opens the panel; there's one rack post per loadout slot outside.
  */
 export function SkillsHouse() {
   const m = useBuildMats()
 
   return (
-    <HouseFrame id="skills" labelHeight={7.4}>
+    <HouseFrame id="skills" labelHeight={10.2}>
       {/* Gravel pad — thick slab sunk into the ground, not a thin sheet. */}
       <mesh receiveShadow position={[0, -1.46, 1]} material={m.tarmac}>
-        <boxGeometry args={[13, 3, 14]} />
+        <boxGeometry args={[15, 3, 15]} />
       </mesh>
 
-      {/* Tent body */}
-      <mesh castShadow receiveShadow position={[0, 1.2, 0]} material={m.canvasTent}>
-        <boxGeometry args={[8.4, 2.4, 6.4]} />
-      </mesh>
-
-      {/* Ridge roof — a proper field-tent pitch. A shallower angle reads as a
-          flat slab floating over the tent from the game camera's height. */}
-      <group position={[0, 2.4, 0]}>
-        {[-1, 1].map((s) => (
-          <mesh
-            key={s}
-            castShadow
-            receiveShadow
-            position={[0, 0.72, s * 1.65]}
-            // Sign matters: rotation.x = +θ drops the panel's far edge, which
-            // is what makes a ridge. Negating it builds a butterfly roof that
-            // rises outward and leaves the ridge cap floating in mid-air.
-            rotation={[s * 0.72, 0, 0]}
-            material={m.canvasDark}
-          >
-            <boxGeometry args={[8.8, 0.18, 4.4]} />
+      <HouseInterior mats={m} lampColor="#ffb08a">
+        {/* ── Content object: the loadout board, one row per slot. ── */}
+        <group position={[2.2, UPPER_Y, -IN_Z + 0.35]}>
+          <mesh castShadow receiveShadow position={[0, 1.5, 0.06]} material={m.metalDark}>
+            <boxGeometry args={[2.8, 2.0, 0.1]} />
           </mesh>
-        ))}
-        <mesh position={[0, 2.12, 0]} material={m.canvasTent}>
-          <boxGeometry args={[8.9, 0.18, 0.44]} />
+          <mesh position={[0, 1.5, 0.12]} material={m.dark}>
+            <boxGeometry args={[2.6, 1.8, 0.03]} />
+          </mesh>
+          {loadout.map((_, i) => (
+            <group key={i} position={[-0.9, 2.15 - i * 0.34, 0.15]}>
+              <mesh material={m.accent}>
+                <boxGeometry args={[0.2, 0.2, 0.02]} />
+              </mesh>
+              <mesh position={[0.9, 0, 0]} material={m.sandbag}>
+                <boxGeometry args={[1.4, 0.12, 0.02]} />
+              </mesh>
+            </group>
+          ))}
+          {/* Rifle rack under the board */}
+          <mesh castShadow position={[0, 0.62, 0.7]} material={m.woodDark}>
+            <boxGeometry args={[2.4, 0.1, 0.4]} />
+          </mesh>
+          <mesh castShadow position={[0, 1.1, 0.7]} material={m.woodDark}>
+            <boxGeometry args={[2.4, 0.08, 0.35]} />
+          </mesh>
+          {[-0.75, -0.25, 0.25, 0.75].map((x) => (
+            <group key={x} position={[x, 0.9, 0.7]} rotation={[0, 0, 0.05]}>
+              <mesh castShadow material={m.dark}>
+                <boxGeometry args={[0.06, 0.8, 0.06]} />
+              </mesh>
+              <mesh position={[0, -0.28, 0.04]} material={m.woodDark}>
+                <boxGeometry args={[0.08, 0.28, 0.1]} />
+              </mesh>
+            </group>
+          ))}
+          <pointLight position={[0, 2.2, 1.2]} intensity={3.4} distance={4.5} color="#ffc48a" />
+        </group>
+
+        {/* Ground floor: ammo crates and a workbench. */}
+        <Crate size={0.85} position={[-3.5, 0, 2.4]} rotation={0.2} mats={m} />
+        <Crate size={0.85} position={[-3.5, 0.85, 2.4]} rotation={-0.3} mats={m} accent />
+        <Crate size={0.85} position={[-3.4, 0, 1.3]} rotation={0.5} mats={m} />
+        <Barrel position={[3.6, 0, 2.6]} mats={m} color="accent" />
+        <mesh castShadow receiveShadow position={[3.2, 0.45, -2.2]} material={m.wood}>
+          <boxGeometry args={[2.4, 0.1, 1.0]} />
         </mesh>
-        {/* Gable infill closing the triangle at each end */}
-        {[-1, 1].map((s) => (
-          <mesh key={s} position={[s * 4.28, 1.0, 0]} material={m.canvasTent}>
-            <boxGeometry args={[0.16, 2.1, 3.0]} />
+        {[2.2, 4.2].map((x) => (
+          <mesh key={x} castShadow position={[x, 0.2, -2.2]} material={m.woodDark}>
+            <boxGeometry args={[0.12, 0.4, 0.9]} />
           </mesh>
         ))}
-        {/* Ridge pole ends poking out */}
+      </HouseInterior>
+
+      {/* Sandbag revetment banked against the outside walls */}
+      <Sandbags count={9} rows={3} position={[-OUT_X - 0.45, 0, -1.5]} rotation={Math.PI / 2} mats={m} />
+      <Sandbags count={9} rows={3} position={[OUT_X + 0.45, 0, -1.5]} rotation={Math.PI / 2} mats={m} />
+      <Sandbags count={7} rows={4} position={[0, 0, -OUT_Z - 0.45]} rotation={0} mats={m} />
+
+      {/* Concrete banding so the blockhouse doesn't read as one flat slab */}
+      <mesh position={[0, 0.55, 0]} material={m.concrete}>
+        <boxGeometry args={[OUT_X * 2 + 0.08, 1.1, OUT_Z * 2 + 0.08]} />
+      </mesh>
+      <mesh position={[0, UPPER_Y - 0.1, 0]} material={m.concreteDark}>
+        <boxGeometry args={[OUT_X * 2 + 0.12, 0.36, OUT_Z * 2 + 0.12]} />
+      </mesh>
+
+      {/* Flat roof with a parapet — an armoury doesn't get a pitched roof. */}
+      <mesh castShadow receiveShadow position={[0, EAVE + 0.2, 0]} material={m.concreteDark}>
+        <boxGeometry args={[OUT_X * 2 + 0.8, 0.4, OUT_Z * 2 + 0.8]} />
+      </mesh>
+      {[
+        [0, OUT_Z + 0.4, OUT_X * 2 + 0.8, 0.26],
+        [0, -OUT_Z - 0.4, OUT_X * 2 + 0.8, 0.26],
+        [OUT_X + 0.4, 0, 0.26, OUT_Z * 2 + 0.8],
+        [-OUT_X - 0.4, 0, 0.26, OUT_Z * 2 + 0.8],
+      ].map(([px, pz, w, d], i) => (
+        <mesh key={i} castShadow position={[px, EAVE + 0.85, pz]} material={m.concrete}>
+          <boxGeometry args={[w, 0.9, d]} />
+        </mesh>
+      ))}
+
+      {/* Canvas awning over the entrance, the last of the old field-tent look */}
+      <group position={[0, 0, OUT_Z + 1.5]}>
+        <mesh castShadow position={[0, 2.9, 0]} rotation={[0.2, 0, 0]} material={m.canvasDark}>
+          <boxGeometry args={[6.4, 0.14, 3.4]} />
+        </mesh>
+        {[-2.8, 2.8].map((x) => (
+          <mesh key={x} castShadow position={[x, 1.5, 1.4]} material={m.woodDark}>
+            <boxGeometry args={[0.16, 3, 0.16]} />
+          </mesh>
+        ))}
+        {/* Guy ropes to the ground */}
         {[-1, 1].map((s) => (
-          <mesh
-            key={s}
-            position={[s * 4.7, 2.12, 0]}
-            rotation={[0, 0, Math.PI / 2]}
-            material={m.woodDark}
-          >
-            <cylinderGeometry args={[0.06, 0.06, 0.9, 5]} />
+          <mesh key={s} position={[s * 3.5, 0.9, 2.2]} rotation={[0.5, 0, s * -0.5]} material={m.sandbag}>
+            <cylinderGeometry args={[0.02, 0.02, 2.6, 4]} />
           </mesh>
         ))}
       </group>
-
-      {/* Guy ropes + stakes */}
-      {[
-        [-4.6, 3.6],
-        [4.6, 3.6],
-        [-4.6, -3.6],
-        [4.6, -3.6],
-      ].map(([x, z], i) => (
-        <mesh
-          key={i}
-          position={[x * 0.72, 1.3, z * 0.72]}
-          rotation={[Math.atan2(z, 4) * 0.5, Math.atan2(x, z), 0.5]}
-        >
-          <cylinderGeometry args={[0.02, 0.02, 3.4, 4]} />
-          <meshStandardMaterial color="#cfc7ae" roughness={1} />
-        </mesh>
-      ))}
-
-      {/* Entrance flaps on +Z */}
-      <mesh position={[0, 1.15, 3.24]} material={m.dark}>
-        <boxGeometry args={[2.6, 2.3, 0.1]} />
-      </mesh>
-      {[-1, 1].map((s) => (
-        <mesh key={s} castShadow position={[s * 1.55, 1.2, 3.34]} rotation={[0, s * -0.35, 0]} material={m.canvasDark}>
-          <boxGeometry args={[1.3, 2.4, 0.09]} />
-        </mesh>
-      ))}
-      <pointLight position={[0, 1.9, 2.4]} intensity={7} distance={8} color="#ffb08a" />
+      <pointLight position={[0, 2.4, OUT_Z + 0.9]} intensity={7} distance={9} color="#ffb08a" />
 
       {/* Weapon racks flanking the entrance — one post per loadout slot */}
       {loadout.map((_, i) => {
         const side = i % 2 === 0 ? -1 : 1
         const idx = Math.floor(i / 2)
         return (
-          <group key={i} position={[side * (2.6 + idx * 1.5), 0, 4.6]} rotation={[0, side * 0.25, 0]}>
+          <group key={i} position={[side * (3.2 + idx * 1.6), 0, OUT_Z + 3.4]} rotation={[0, side * 0.25, 0]}>
             <mesh castShadow position={[0, 0.62, 0]} material={m.woodDark}>
               <boxGeometry args={[0.12, 1.24, 0.12]} />
             </mesh>
@@ -112,59 +148,29 @@ export function SkillsHouse() {
                 <mesh position={[0, -0.24, 0.05]} material={m.woodDark}>
                   <boxGeometry args={[0.07, 0.26, 0.09]} />
                 </mesh>
-                <mesh position={[0, 0.1, 0.06]} material={m.metalDark}>
-                  <boxGeometry args={[0.045, 0.16, 0.07]} />
-                </mesh>
               </group>
             ))}
           </group>
         )
       })}
 
-      {/* Ammo crates + supplies */}
-      <Crate size={0.85} position={[-4.6, 0.16, 1.4]} rotation={0.2} mats={m} />
-      <Crate size={0.85} position={[-4.6, 1.01, 1.4]} rotation={-0.3} mats={m} accent />
-      <Crate size={0.85} position={[-4.5, 0.16, 2.4]} rotation={0.5} mats={m} />
-      <Crate size={0.8} position={[4.8, 0.16, 1.1]} rotation={-0.2} mats={m} />
-
-      <Barrel position={[5.0, 0.16, 2.6]} mats={m} color="accent" />
-      {/* Kept off the centre line — the door marker sits at local (0, 6.2)
-          and the player has to be able to stand on it. */}
-      <Sandbags count={6} rows={3} position={[-4.4, 0.16, 6.6]} rotation={0.32} mats={m} />
-      <Sandbags count={4} rows={2} position={[4.6, 0.16, 6.2]} rotation={-0.3} mats={m} />
-
-      {/* Target range behind the tent */}
-      {[-2.4, 0, 2.4].map((x, i) => (
-        <group key={i} position={[x, 0, -5.4]}>
-          <mesh castShadow position={[0, 0.85, 0]} material={m.woodDark}>
-            <boxGeometry args={[0.1, 1.7, 0.1]} />
-          </mesh>
-          <mesh castShadow position={[0, 1.55, 0.04]} material={m.plaster}>
-            <boxGeometry args={[0.85, 0.85, 0.05]} />
-          </mesh>
-          <mesh position={[0, 1.55, 0.08]} material={m.red}>
-            <circleGeometry args={[0.26, 16]} />
-          </mesh>
-          <mesh position={[0, 1.55, 0.09]} material={m.dark}>
-            <circleGeometry args={[0.09, 12]} />
-          </mesh>
-        </group>
-      ))}
+      {/* Dressing kept off the door line — the marker sits at local (0, 6.2). */}
+      <Sandbags count={6} rows={3} position={[-4.6, 0, OUT_Z + 2.2]} rotation={0.32} mats={m} />
+      <Crate size={0.8} position={[5.2, 0, OUT_Z + 1.4]} rotation={-0.2} mats={m} />
+      <Barrel position={[5.6, 0, OUT_Z + 2.4]} mats={m} color="accent" />
 
       {/* Flag pole */}
-      <mesh castShadow position={[5.6, 2.2, 5.4]} material={m.metal}>
+      <mesh castShadow position={[6.4, 2.2, OUT_Z + 0.8]} material={m.metal}>
         <cylinderGeometry args={[0.05, 0.06, 4.4, 6]} />
       </mesh>
-      <mesh position={[6.2, 3.8, 5.4]} material={m.red}>
+      <mesh position={[7.0, 3.8, OUT_Z + 0.8]} material={m.red}>
         <boxGeometry args={[1.2, 0.72, 0.03]} />
       </mesh>
 
       <Colliders
         boxes={[
-          { args: [4.25, 1.75, 3.25], position: [0, 1.75, 0] },
-          { args: [1.6, 0.5, 0.4], position: [-4.4, 0.45, 6.6], rotation: 0.32 },
-          { args: [1.1, 0.4, 0.4], position: [4.6, 0.35, 6.2], rotation: -0.3 },
-          { args: [0.06, 2.2, 0.06], position: [5.6, 2.2, 5.4] },
+          { args: [1.6, 0.5, 0.4], position: [-4.6, 0.45, OUT_Z + 2.2], rotation: 0.32 },
+          { args: [0.06, 2.2, 0.06], position: [6.4, 2.2, OUT_Z + 0.8] },
         ]}
       />
     </HouseFrame>

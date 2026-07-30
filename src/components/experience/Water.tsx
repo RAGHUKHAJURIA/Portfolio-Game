@@ -6,8 +6,9 @@ import { ISLAND } from '../../data/portfolioData'
 import { tiled } from '../../lib/textures'
 
 /** Wide enough that the far edge is always buried in fog. */
-const SIZE = 520
-const SEG = 46
+const SIZE = 1300
+/** ~13.5 units per facet — matches the old density, so the swells still read. */
+const SEG = 96
 const CHOP_SCALE = new Vector2(0.65, 0.65)
 
 /**

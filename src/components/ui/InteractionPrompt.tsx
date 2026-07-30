@@ -3,15 +3,16 @@ import { houseById } from '../../data/portfolioData'
 import { useGameStore } from '../../store/useGameStore'
 import { playOpen } from '../../lib/audio'
 
-/** Top-centre "[E] Enter" callout while the player stands in a trigger. */
+/** Top-centre "[E] Open" callout while the player stands in a content trigger. */
 export function InteractionPrompt() {
   const nearHouse = useGameStore((s) => s.nearHouse)
   const activeHouse = useGameStore((s) => s.activeHouse)
+  const mapOpen = useGameStore((s) => s.mapOpen)
   const phase = useGameStore((s) => s.phase)
   const isMobile = useGameStore((s) => s.isMobile)
   const openHouse = useGameStore((s) => s.openHouse)
 
-  const show = nearHouse !== null && activeHouse === null && phase === 'playing'
+  const show = nearHouse !== null && activeHouse === null && !mapOpen && phase === 'playing'
   const meta = nearHouse ? houseById[nearHouse] : null
 
   return (
@@ -20,6 +21,7 @@ export function InteractionPrompt() {
         <motion.div
           key={meta.id}
           data-ui
+          data-testid="interact-prompt"
           initial={{ opacity: 0, y: -14, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -10, scale: 0.96 }}
@@ -64,7 +66,7 @@ export function InteractionPrompt() {
                 <>
                   <span className="key-cap animate-pulse">E</span>
                   <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/55">
-                    enter
+                    open
                   </span>
                 </>
               )}

@@ -6,12 +6,18 @@ import { cameraOrbit, playerState } from '../../state/controls'
 import { useGameStore } from '../../store/useGameStore'
 import { terrainHeight } from '../../lib/terrain'
 import { CANOPIES } from '../../lib/scatter'
+import { insideHouse } from './houses/HouseInterior'
 
 const HEAD_HEIGHT = 1.55
 /** Over-the-shoulder offset, in camera-right units. */
 const SHOULDER = 0.7
 /** Closest the boom is ever allowed to pull in. */
 const MIN_BOOM = 3.4
+/** Tight enough to sit behind the head in a 9x8 room without punching out. */
+const INDOOR_MIN_BOOM = 1.5
+/** Matches the Canvas camera; aiming eases toward AIM_FOV. */
+const BASE_FOV = 55
+const AIM_FOV = 38
 
 const _target = new Vector3()
 const _desired = new Vector3()
@@ -56,7 +62,7 @@ function canopyHit(ox: number, oy: number, oz: number, dir: Vector3, maxT: numbe
  * than a fixed lerp factor).
  */
 export function CameraRig() {
-  const { camera } = useThree()
+  const camera = useThree((s) => s.camera) as import('three').PerspectiveCamera
   const { world, rapier } = useRapier()
   const look = useRef(new Vector3(0, 1.4, 0))
   const boom = useRef(cameraOrbit.distance)
@@ -75,6 +81,16 @@ export function CameraRig() {
 
   useFrame((_, rawDelta) => {
     const dt = Math.min(rawDelta, 1 / 20)
+
+    // Aiming narrows the field of view and pulls the boom in — the two
+    // together are what make shouldering the weapon read as aiming rather than
+    // as a pose change.
+    const aim = playerState.aim
+    const wantFov = BASE_FOV - aim * (BASE_FOV - AIM_FOV)
+    if (Math.abs(camera.fov - wantFov) > 0.01) {
+      camera.fov += (wantFov - camera.fov) * Math.min(1, dt * 10)
+      camera.updateProjectionMatrix()
+    }
 
     // Ease the zoom toward its target.
     cameraOrbit.distance += (cameraOrbit.targetDistance - cameraOrbit.distance) * Math.min(1, dt * 8)
@@ -126,7 +142,11 @@ export function CameraRig() {
 
     // Never collapse all the way onto the character — a third-person camera
     // inside the backpack is worse than one clipping a trunk for a moment.
-    wanted = Math.max(MIN_BOOM, Math.min(dist, wanted))
+    // Indoors that floor is the problem rather than the cure: it is longer
+    // than a room is wide, so it would hold the camera outside the wall it
+    // just collided with. Rooms get a much shorter one.
+    const floor = insideHouse(_target.x, _target.y, _target.z) ? INDOOR_MIN_BOOM : MIN_BOOM
+    wanted = Math.max(floor, Math.min(dist, wanted))
 
     // Damp the boom out quickly when blocked, back out slowly when clear.
     const boomSpeed = wanted < boom.current ? 22 : 5

@@ -81,7 +81,10 @@ export function Lighting() {
         <Sky {...SKY} />
       </Environment>
 
-      <fogExp2 attach="fog" args={['#a9b6bd', 0.0085]} />
+      {/* Density is tuned so the far shore fogs by about the same amount it
+          used to on the small island: 0.0085 × 88 ÷ 280. At the old value you
+          could not see across the enlarged island at all. */}
+      <fogExp2 attach="fog" args={['#a9b6bd', 0.0027]} />
 
       {/* Trimmed hard from 1.0/0.4: the environment map now supplies the sky
           bounce these two were faking, and stacking all three flattens the

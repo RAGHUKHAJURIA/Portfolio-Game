@@ -8,7 +8,11 @@ import {
   PerspectiveCamera,
 } from 'three'
 import { houses, ISLAND, projects, loadout, timeline } from '../src/data/portfolioData.ts'
-import { terrainHeight, pathStrength, houseGroundY } from '../src/lib/terrain.ts'
+import { terrainHeight, pathStrength, houseGroundY, INLETS, isSubmerged } from '../src/lib/terrain.ts'
+
+/** Inside a declared water inlet, where being under the waterline is the point. */
+const inInlet = (x: number, z: number) =>
+  INLETS.some((m) => Math.hypot(x - m.x, z - m.z) < m.r)
 
 let fail = 0
 const check = (name: string, ok: boolean, extra = '') => {
@@ -48,16 +52,35 @@ for (let i = 0; i < houses.length; i++) {
   }
 }
 
-console.log('\n--- trigger overlap ---')
+console.log('\n--- indoor content triggers ---')
+// Triggers live on the upper floor now, so they must sit inside the shell and
+// clear of the stairwell, and the exterior door marker must not reach them.
+const IN_X = 4.7
+const IN_Z = 4.2
+const STAIRWELL_X = -IN_X + 1.5 + 0.4
+for (const h of houses) {
+  const [lx, lz] = h.interior
+  check(
+    `  ${h.id}: content object inside the shell`,
+    Math.abs(lx) < IN_X - 0.3 && Math.abs(lz) < IN_Z - 0.3,
+    `local=(${lx}, ${lz})`
+  )
+  check(`  ${h.id}: content object clear of the stairwell`, lx > STAIRWELL_X + 0.5)
+  check(`  ${h.id}: trigger fits inside the room`, h.interiorRadius < IN_Z)
+}
 for (let i = 0; i < houses.length; i++) {
   for (let j = i + 1; j < houses.length; j++) {
     const a = houses[i]
     const b = houses[j]
     const d = Math.hypot(
-      a.position[0] + a.markerOffset[0] - (b.position[0] + b.markerOffset[0]),
-      a.position[1] + a.markerOffset[1] - (b.position[1] + b.markerOffset[1])
+      a.position[0] + a.interiorOffset[0] - (b.position[0] + b.interiorOffset[0]),
+      a.position[1] + a.interiorOffset[1] - (b.position[1] + b.interiorOffset[1])
     )
-    check(`  triggers ${a.id}/${b.id} disjoint`, d > a.radius + b.radius, `d=${d.toFixed(1)}`)
+    check(
+      `  triggers ${a.id}/${b.id} disjoint`,
+      d > a.interiorRadius + b.interiorRadius,
+      `d=${d.toFixed(1)}`
+    )
   }
 }
 
@@ -87,27 +110,55 @@ const spawn = terrainHeight(0, 2)
 check('plaza above sea', spawn > ISLAND.seaLevel + 1, `y=${spawn.toFixed(2)}`)
 check('drop landing point above sea', terrainHeight(0, 9) > ISLAND.seaLevel + 1)
 check('boundary ring above sea', (() => {
-  for (let a = 0; a < 64; a++) {
-    const t = (a / 64) * Math.PI * 2
-    if (terrainHeight(Math.cos(t) * ISLAND.boundary, Math.sin(t) * ISLAND.boundary) < ISLAND.seaLevel + 0.2) return false
+  for (let a = 0; a < 256; a++) {
+    const t = (a / 256) * Math.PI * 2
+    const bx = Math.cos(t) * ISLAND.boundary
+    const bz = Math.sin(t) * ISLAND.boundary
+    // Inlets deliberately breach the boundary circle; what stops the player
+    // there is Character's wet guard, not terrain height.
+    if (inInlet(bx, bz)) continue
+    if (terrainHeight(bx, bz) < ISLAND.seaLevel + 0.2) return false
   }
   return true
-})(), 'walkable all the way to the fence')
-check('far offshore is underwater', terrainHeight(58, 0) < ISLAND.seaLevel)
+})(), 'walkable all the way to the fence, inlets excepted')
+check('far offshore is underwater', terrainHeight(ISLAND.half, 0) < ISLAND.seaLevel)
 
 let minH = Infinity
 let maxH = -Infinity
-for (let x = -40; x <= 40; x += 2) {
-  for (let z = -40; z <= 40; z += 2) {
-    if (Math.hypot(x, z) > 40) continue
+let wet: [number, number] | null = null
+const SAMPLE_R = ISLAND.boundary
+for (let x = -SAMPLE_R; x <= SAMPLE_R; x += 3) {
+  for (let z = -SAMPLE_R; z <= SAMPLE_R; z += 3) {
+    if (Math.hypot(x, z) > SAMPLE_R) continue
+    if (inInlet(x, z)) continue
     const y = terrainHeight(x, z)
     minH = Math.min(minH, y)
     maxH = Math.max(maxH, y)
+    if (y < ISLAND.seaLevel && !wet) wet = [x, z]
   }
 }
 console.log(`  land height range: ${minH.toFixed(2)} â€¦ ${maxH.toFixed(2)}`)
-check('no walkable land below sea', minH > ISLAND.seaLevel, `min=${minH.toFixed(2)}`)
-check('terrain relief is reasonable', maxH - minH < 14, `range=${(maxH - minH).toFixed(2)}`)
+check(
+  'no walkable land below sea outside an inlet',
+  wet === null,
+  wet ? `wet at (${wet[0]}, ${wet[1]})` : `min=${minH.toFixed(2)}`
+)
+check('terrain relief is reasonable', maxH - minH < 26, `range=${(maxH - minH).toFixed(2)}`)
+
+console.log('\n--- water inlets and dry footing ---')
+for (const m of INLETS) {
+  const y = terrainHeight(m.x, m.z)
+  check(`  inlet (${m.x},${m.z}) breaks the waterline`, y < ISLAND.seaLevel, `y=${y.toFixed(2)}`)
+  check(`  inlet (${m.x},${m.z}) reaches the sea`, Math.hypot(m.x, m.z) + m.r > ISLAND.boundary)
+  // The wet guard has to agree with the terrain or the player wades in anyway.
+  check(`  inlet (${m.x},${m.z}) reads as submerged`, isSubmerged(m.x, m.z))
+}
+for (const h of houses) {
+  const mx = h.position[0] + h.markerOffset[0]
+  const mz = h.position[1] + h.markerOffset[1]
+  check(`  ${h.id}: door marker is dry`, !isSubmerged(mx, mz))
+}
+check('drop plaza is dry', !isSubmerged(0, 2) && !isSubmerged(0, 9))
 
 console.log('\n--- max slope on the trails ---')
 let worst = 0

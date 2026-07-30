@@ -28,6 +28,9 @@ function ControlsLegend() {
         { k: ['DRAG'], label: 'look around' },
         { k: ['JUMP'], label: 'jump' },
         { k: ['TAP'], label: 'enter building' },
+        { k: ['MAP'], label: 'tap minimap' },
+        { k: ['AIM'], label: 'hold to aim' },
+        { k: ['FIRE'], label: 'shoot' },
       ]
     : [
         { k: ['W', 'A', 'S', 'D'], label: 'move' },
@@ -36,6 +39,9 @@ function ControlsLegend() {
         { k: ['DRAG'], label: 'look around' },
         { k: ['SCROLL'], label: 'zoom' },
         { k: ['E'], label: 'enter building' },
+        { k: ['M'], label: 'full map' },
+        { k: ['RMB'], label: 'hold to aim' },
+        { k: ['LMB'], label: 'fire while aiming' },
         { k: ['ESC'], label: 'close panel' },
       ]
 
@@ -189,7 +195,8 @@ export function Hud() {
   const phase = useGameStore((s) => s.phase)
   const activeHouse = useGameStore((s) => s.activeHouse)
   const isMobile = useGameStore((s) => s.isMobile)
-  const visible = phase === 'playing' && activeHouse === null
+  const mapOpen = useGameStore((s) => s.mapOpen)
+  const visible = phase === 'playing' && activeHouse === null && !mapOpen
 
   return (
     <AnimatePresence>
@@ -211,14 +218,25 @@ export function Hud() {
             <ObjectiveTracker />
           </div>
 
-          {/* Bottom-left minimap */}
+          {/* Bottom-left minimap. Doubles as the button for the full map —
+              tapping the small map to get the big one needs no extra chrome,
+              which matters most on a phone where screen space is the budget. */}
           <div
             className={`pointer-events-auto absolute left-4 ${
               isMobile ? 'bottom-[11.5rem]' : 'bottom-4'
             }`}
           >
-            {/* 150px eats 38% of a 390px-wide phone — scale it down there. */}
-            <Minimap size={isMobile ? 108 : 150} />
+            <button
+              onClick={() => {
+                playClick()
+                useGameStore.getState().toggleMap()
+              }}
+              title="Open tactical map (M)"
+              className="block text-left transition-transform hover:scale-[1.03]"
+            >
+              {/* 150px eats 38% of a 390px-wide phone — scale it down there. */}
+              <Minimap size={isMobile ? 108 : 150} />
+            </button>
           </div>
 
           {/* Bottom-right controls */}

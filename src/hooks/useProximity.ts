@@ -3,15 +3,28 @@ import { useFrame } from '@react-three/fiber'
 import { houses } from '../data/portfolioData'
 import type { HouseId } from '../data/portfolioData'
 import { input, playerState } from '../state/controls'
-import { useGameStore } from '../store/useGameStore'
+import { useGameStore, isInputFrozen } from '../store/useGameStore'
 import { playOpen, playPrompt } from '../lib/audio'
+import { houseGroundY } from '../lib/terrain'
+import { FEET_OFFSET } from '../lib/constants'
 
-/** Precomputed marker positions — these never move. */
+/**
+ * Precomputed content-object positions — these never move.
+ *
+ * The trigger is the object *inside* the building, on its upper floor, not the
+ * door marker outside: the door marker is signage now. That makes the test
+ * three-dimensional, because the ground floor sits directly beneath the upper
+ * one and a flat XZ check would fire the panel from downstairs.
+ */
+const FLOOR_TOLERANCE = 1.6
+
 const TRIGGERS = houses.map((h) => ({
   id: h.id,
-  x: h.position[0] + h.markerOffset[0],
-  z: h.position[1] + h.markerOffset[1],
-  r2: h.radius * h.radius,
+  x: h.position[0] + h.interiorOffset[0],
+  z: h.position[1] + h.interiorOffset[1],
+  /** Height of the floor the object stands on, in world space. */
+  y: houseGroundY[h.id] + h.interiorY,
+  r2: h.interiorRadius * h.interiorRadius,
 }))
 
 /**
@@ -25,7 +38,7 @@ export function useProximity() {
   useFrame(() => {
     const store = useGameStore.getState()
 
-    if (store.phase !== 'playing' || store.activeHouse !== null) {
+    if (isInputFrozen()) {
       if (last.current !== null) {
         last.current = null
         store.setNearHouse(null)
@@ -34,9 +47,13 @@ export function useProximity() {
       return
     }
 
+    // playerState.y is the capsule centre; the feet are what stand on a floor.
+    const feetY = playerState.y - FEET_OFFSET
+
     let best: HouseId | null = null
     let bestD2 = Infinity
     for (const t of TRIGGERS) {
+      if (Math.abs(feetY - t.y) > FLOOR_TOLERANCE) continue
       const dx = playerState.x - t.x
       const dz = playerState.z - t.z
       const d2 = dx * dx + dz * dz

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { cameraOrbit } from '../state/controls'
-import { useGameStore } from '../store/useGameStore'
+import { cameraOrbit, input } from '../state/controls'
+import { isInputFrozen } from '../store/useGameStore'
 
 const PITCH_MIN = -0.32
 const PITCH_MAX = 1.05
@@ -27,12 +27,19 @@ export function usePointerLook() {
       t instanceof Element && t.closest('[data-ui]') !== null
 
     const onPointerDown = (e: PointerEvent) => {
-      const s = useGameStore.getState()
-      if (s.activeHouse !== null || s.phase !== 'playing') return
+      if (isInputFrozen()) return
       if (isUi(e.target)) return
       if (e.pointerType !== 'touch' && e.button !== 0 && e.button !== 2) return
       // On touch, the left half of the screen belongs to the joystick.
       if (e.pointerType === 'touch' && e.clientX < window.innerWidth * 0.4) return
+
+      // Right-hold shoulders the weapon; left-click fires, but only while
+      // aiming. Firing on any left-click would put a round downrange every
+      // time the player grabbed the camera to look around.
+      if (e.pointerType !== 'touch') {
+        if (e.button === 2) input.aim = true
+        else if (e.button === 0 && input.aim) input.firePressed = true
+      }
 
       dragging = true
       pointerId = e.pointerId
@@ -56,14 +63,21 @@ export function usePointerLook() {
     }
 
     const stop = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch' && e.button === 2) input.aim = false
       if (pointerId !== null && e.pointerId !== pointerId) return
       dragging = false
       pointerId = null
     }
 
+    // A right-drag that ends outside the window never fires pointerup, and the
+    // weapon would stay shouldered for ever.
+    const onBlur = () => {
+      input.aim = false
+      input.firePressed = false
+    }
+
     const onWheel = (e: WheelEvent) => {
-      const s = useGameStore.getState()
-      if (s.activeHouse !== null || s.phase !== 'playing') return
+      if (isInputFrozen()) return
       if (isUi(e.target)) return
       e.preventDefault()
       cameraOrbit.targetDistance = Math.max(
@@ -82,6 +96,7 @@ export function usePointerLook() {
     window.addEventListener('pointercancel', stop)
     window.addEventListener('wheel', onWheel, { passive: false })
     window.addEventListener('contextmenu', onContextMenu)
+    window.addEventListener('blur', onBlur)
 
     return () => {
       window.removeEventListener('pointerdown', onPointerDown)
@@ -90,6 +105,7 @@ export function usePointerLook() {
       window.removeEventListener('pointercancel', stop)
       window.removeEventListener('wheel', onWheel)
       window.removeEventListener('contextmenu', onContextMenu)
+      window.removeEventListener('blur', onBlur)
     }
   }, [])
 }

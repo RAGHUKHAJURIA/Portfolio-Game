@@ -15,10 +15,14 @@ export const RUN_SPEED = 8.4
 /** Boom length once the player has control. */
 export const PLAY_DISTANCE = 8.5
 
-/** Where the parachute drop begins and roughly where it lands. */
-export const DROP_FROM: [number, number, number] = [26, 40, 36]
+/**
+ * Where the parachute drop begins and roughly where it lands. Scaled up with
+ * the island so the descent actually shows it off, but kept short enough to
+ * stay well inside Character's MAX_DROP_SECONDS watchdog.
+ */
+export const DROP_FROM: [number, number, number] = [55, 78, 70]
 export const DROP_TO: [number, number] = [0, 9]
 /** World Y at which the canopy opens. */
-export const CHUTE_ALTITUDE = 20
+export const CHUTE_ALTITUDE = 26
 export const FREEFALL_TERMINAL = -30
 export const CHUTE_SPEED = -10

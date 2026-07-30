@@ -18,6 +18,10 @@ export const input = {
   sprint: false,
   /** Rising-edge interact; consumed by the interaction system. */
   interactPressed: false,
+  /** Held aim (right mouse / mobile ADS button). */
+  aim: false,
+  /** Rising-edge fire; consumed by the weapon system. */
+  firePressed: false,
 }
 
 /** Orbit state for the third-person camera. */
@@ -43,6 +47,9 @@ export const playerState = {
   grounded: true,
   /** 0 idle, 1 walk, 2 run */
   gait: 0 as 0 | 1 | 2,
+  /** 0 = weapon lowered … 1 = fully shouldered. Damped, not a boolean, so the
+   *  camera FOV, the crosshair and the arms all ease together. */
+  aim: 0,
 }
 
 export const resetInput = () => {
@@ -51,4 +58,6 @@ export const resetInput = () => {
   input.jump = false
   input.sprint = false
   input.interactPressed = false
+  input.aim = false
+  input.firePressed = false
 }

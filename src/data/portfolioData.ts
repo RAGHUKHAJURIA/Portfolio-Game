@@ -375,13 +375,22 @@ type HouseDef = {
   rotation: number
   /** How far in front of the door the interaction marker sits. */
   doorDistance: number
-  /** Radius around the marker in which the [E] prompt appears. */
+  /** Radius of the exterior marker ring. Signage only — the [E] prompt now
+   *  lives indoors, see `interior` below. */
   radius: number
+  /** Local [x, z] of the content object inside the building, before rotation. */
+  interior: [number, number]
+  /** Local Y of the floor that content object stands on. */
+  interiorY: number
+  /** Radius around the content object in which the [E] prompt appears. */
+  interiorRadius: number
 }
 
 export type HouseMeta = HouseDef & {
   /** Derived: world offset from building centre to the door marker. */
   markerOffset: [number, number]
+  /** Derived: world offset from building centre to the content object. */
+  interiorOffset: [number, number]
 }
 
 const HOUSE_DEFS: HouseDef[] = [
@@ -391,10 +400,13 @@ const HOUSE_DEFS: HouseDef[] = [
     sublabel: 'Operator Dossier',
     icon: '👤',
     color: '#f0a92e',
-    position: [0, -23],
+    position: [0, -62],
     rotation: 0,
     doorDistance: 7.2,
     radius: 4.4,
+    interior: [2.2, -3.4],
+    interiorY: 3.25,
+    interiorRadius: 2.6,
   },
   {
     id: 'projects',
@@ -402,10 +414,13 @@ const HOUSE_DEFS: HouseDef[] = [
     sublabel: 'Supply Warehouse',
     icon: '📦',
     color: '#5fd3a0',
-    position: [-25, 2],
+    position: [-68, 5],
     rotation: 1.05,
     doorDistance: 9.4,
     radius: 4.8,
+    interior: [2.2, -3.4],
+    interiorY: 3.25,
+    interiorRadius: 2.6,
   },
   {
     id: 'skills',
@@ -413,10 +428,13 @@ const HOUSE_DEFS: HouseDef[] = [
     sublabel: 'Armory',
     icon: '🎯',
     color: '#e05c5c',
-    position: [24, -9],
+    position: [65, -24],
     rotation: -2.05,
     doorDistance: 6.2,
     radius: 4.4,
+    interior: [2.2, -3.4],
+    interiorY: 3.25,
+    interiorRadius: 2.6,
   },
   {
     id: 'experience',
@@ -424,10 +442,13 @@ const HOUSE_DEFS: HouseDef[] = [
     sublabel: 'Training Ground',
     icon: '🎖',
     color: '#8f7fe0',
-    position: [18, 21],
+    position: [49, 57],
     rotation: -2.9,
     doorDistance: 7.0,
     radius: 4.6,
+    interior: [2.2, -3.4],
+    interiorY: 3.25,
+    interiorRadius: 2.6,
   },
   {
     id: 'contact',
@@ -435,35 +456,50 @@ const HOUSE_DEFS: HouseDef[] = [
     sublabel: 'Comms Tower',
     icon: '📡',
     color: '#3fa9f5',
-    position: [-19, 25],
+    position: [-52, 68],
     rotation: 0.35,
     doorDistance: 6.4,
     radius: 4.6,
+    interior: [2.2, -3.4],
+    interiorY: 3.25,
+    interiorRadius: 2.6,
   },
 ]
 
-/** Door markers are derived from rotation so the prompt is always at the door. */
-export const houses: HouseMeta[] = HOUSE_DEFS.map((h) => ({
-  ...h,
-  markerOffset: [
-    Math.sin(h.rotation) * h.doorDistance,
-    Math.cos(h.rotation) * h.doorDistance,
-  ],
-}))
+/**
+ * Both offsets are derived from `rotation` so nothing can drift out of sync:
+ * every building is authored with its door on local +Z, and a local point
+ * (lx, lz) lands at world (lx·cos + lz·sin, −lx·sin + lz·cos).
+ */
+export const houses: HouseMeta[] = HOUSE_DEFS.map((h) => {
+  const c = Math.cos(h.rotation)
+  const s = Math.sin(h.rotation)
+  return {
+    ...h,
+    markerOffset: [s * h.doorDistance, c * h.doorDistance],
+    interiorOffset: [h.interior[0] * c + h.interior[1] * s, -h.interior[0] * s + h.interior[1] * c],
+  }
+})
 
 export const houseById = Object.fromEntries(houses.map((h) => [h.id, h])) as Record<
   HouseId,
   HouseMeta
 >
 
-/** Island tuning constants shared by terrain, minimap and boundary logic. */
+/**
+ * Island tuning constants shared by terrain, minimap and boundary logic.
+ *
+ * Sized so the landmass fits inside roughly 300×300 world units. Everything
+ * downstream derives from these — the minimap scale, the boundary fence, the
+ * prop scatter radius — so this is the only place the island's size is set.
+ */
 export const ISLAND = {
   /** Visual extent of the landmass, including the beach ring. Minimap only. */
-  radius: 47,
+  radius: 140,
   /** Where the player is turned back. Comfortably inside the beach. */
-  boundary: 44,
-  /** Half-size of the terrain mesh. */
-  half: 62,
+  boundary: 132,
+  /** Half-size of the terrain mesh. Must clear the shore's underwater skirt. */
+  half: 186,
   /** Sea level, world Y. */
   seaLevel: -1.2,
 }

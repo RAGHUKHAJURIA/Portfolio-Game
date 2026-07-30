@@ -5,9 +5,9 @@ import type { RapierRigidBody } from '@react-three/rapier'
 import type { Group } from 'three'
 import { CharacterModel } from './CharacterModel'
 import { cameraOrbit, input, playerState } from '../../state/controls'
-import { useGameStore } from '../../store/useGameStore'
+import { useGameStore, isInputFrozen } from '../../store/useGameStore'
 import { ISLAND } from '../../data/portfolioData'
-import { terrainHeight } from '../../lib/terrain'
+import { isSubmerged, terrainHeight } from '../../lib/terrain'
 import { playFootstep, playLand, playJump } from '../../lib/audio'
 import { spawnDust } from './Dust'
 
@@ -85,6 +85,30 @@ export function Character() {
       }
     }
   }, [world])
+
+  /**
+   * `?debug` exposes a teleport for scripts/visual-check.mjs. The interiors are
+   * 60–90 units from the drop zone; under software WebGL walking there takes
+   * minutes and any scripted route is one collision away from being wrong, so
+   * the walkthrough places the player instead. Opt-in by query string, same as
+   * the renderer hook in App.
+   */
+  useEffect(() => {
+    if (!new URLSearchParams(location.search).has('debug')) return
+    const w = window as unknown as { __tp?: (x: number, y: number, z: number) => void }
+    w.__tp = (x, y, z) => {
+      body.current?.setTranslation({ x, y, z }, true)
+      velX.current = 0
+      velZ.current = 0
+      velY.current = 0
+      playerState.x = x
+      playerState.y = y
+      playerState.z = z
+    }
+    return () => {
+      delete w.__tp
+    }
+  }, [])
 
   /* Teleport to altitude the moment the drop begins. */
   useEffect(() => {
@@ -174,7 +198,7 @@ export function Character() {
     }
 
     /* ── Normal play ─────────────────────────────────────── */
-    const frozen = useGameStore.getState().activeHouse !== null || phase !== 'playing'
+    const frozen = isInputFrozen()
 
     let mx = 0
     let mz = 0
@@ -261,6 +285,20 @@ export function Character() {
       const s = ISLAND.boundary / r
       nx *= s
       nz *= s
+    }
+
+    // Keep the player out of the water. The boundary is a circle, but the
+    // island isn't — the shore inlet cuts inside it, and the ocean plane is
+    // opaque, so wading in would bury the camera and character under it.
+    // Each axis is retried alone so you slide along the waterline instead of
+    // sticking to it. Skipped if already wet, or a stray spawn would trap you.
+    if (!isSubmerged(pos.x, pos.z) && isSubmerged(nx, nz)) {
+      if (!isSubmerged(nx, pos.z)) nz = pos.z
+      else if (!isSubmerged(pos.x, nz)) nx = pos.x
+      else {
+        nx = pos.x
+        nz = pos.z
+      }
     }
     // Safety net: never let the player end up under the world.
     const floor = terrainHeight(nx, nz) + FEET_OFFSET

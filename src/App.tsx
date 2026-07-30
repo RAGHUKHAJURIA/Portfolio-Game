@@ -9,12 +9,15 @@ import { Character } from './components/experience/Character'
 import { CameraRig } from './components/experience/CameraRig'
 import { Lighting } from './components/experience/Lighting'
 import { PostFx } from './components/experience/PostFx'
+import { Weapon } from './components/experience/range/Weapon'
 import { ProximitySystem } from './hooks/useProximity'
 
 import { LoadingScreen } from './components/ui/LoadingScreen'
 import { Hud } from './components/ui/Hud'
 import { InteractionPrompt } from './components/ui/InteractionPrompt'
 import { SectionModal } from './components/ui/SectionModal'
+import { FullMap } from './components/ui/FullMap'
+import { Crosshair } from './components/ui/Crosshair'
 import { MobileControls } from './components/ui/MobileControls'
 import { DropOverlay } from './components/ui/DropOverlay'
 import { FallbackShell } from './components/ui/FallbackShell'
@@ -49,6 +52,8 @@ function Scene() {
         <Island />
         <Character />
         <CameraRig />
+        {/* Inside Physics: its shot raycast uses the same world. */}
+        <Weapon />
       </Physics>
       <ProximitySystem />
       {/* Last, so the composer's render pass sees the finished scene. */}
@@ -67,7 +72,7 @@ export default function App() {
   // to move, so stop rendering entirely instead of spinning the GPU behind a
   // modal. The last frame stays on screen as the backdrop. Every useFrame in
   // the scene clamps its delta, so the jump on resume is harmless.
-  const paused = useGameStore((s) => s.activeHouse !== null)
+  const paused = useGameStore((s) => s.activeHouse !== null || s.mapOpen)
 
   // Probed once. Without WebGL the island can never start, so serve the same
   // content as a plain document rather than stranding the visitor on a
@@ -99,7 +104,11 @@ export default function App() {
           toneMapping: ACESFilmicToneMapping,
           toneMappingExposure: 1.02,
         }}
-        camera={{ fov: 55, near: 0.1, far: 900, position: [10, 12, 22] }}
+        // far covers the 1300-unit ocean plane; the sky dome is exempt because
+        // three's sky shader forces its depth to the far plane. near comes up
+        // from 0.1 to claw back depth precision at that range — the boom never
+        // gets closer than MIN_BOOM, so nothing clips.
+        camera={{ fov: 55, near: 0.3, far: 1400, position: [10, 12, 22] }}
         // `?debug` hands the renderer to scripts/visual-check.mjs so it can
         // assert on draw calls and culling instead of eyeballing screenshots.
         // Opt-in by query string because `verify` runs the production build.
@@ -124,6 +133,8 @@ export default function App() {
       <Hud />
       <InteractionPrompt />
       <MobileControls />
+      <Crosshair />
+      <FullMap />
       <SectionModal />
       <LoadingScreen />
     </div>
