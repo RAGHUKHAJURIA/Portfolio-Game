@@ -93,6 +93,20 @@ export function AboutPanel({ color }: { color: string }) {
           {profile.status}
         </span>
       </div>
+
+      {/* A portfolio inside a portfolio doesn't warrant its own crate, but the
+          previous one is worth a line for anyone curious how this evolved. */}
+      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/30">
+        previous portfolio ·{' '}
+        <a
+          href={profile.previousPortfolio}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="underline decoration-white/20 underline-offset-2 transition-colors hover:text-white/70"
+        >
+          raghubuilds.vercel.app ↗
+        </a>
+      </p>
     </div>
   )
 }

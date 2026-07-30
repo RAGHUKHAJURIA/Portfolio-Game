@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "check": "tsc -b && tsx scripts/smoke.ts",
-    "verify": "npm run check && npm run build && node scripts/verify.mjs"
+    "verify": "npm run check && npm run build && npm run links && node scripts/verify.mjs",
+    "links": "tsx scripts/check-links.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.122.0",

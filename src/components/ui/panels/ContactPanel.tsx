@@ -87,7 +87,9 @@ export function ContactPanel({ color }: { color: string }) {
       <div className="grid gap-2 sm:grid-cols-2">
         <a
           href={profile.resumeUrl}
-          download
+          // Named, so it doesn't land in someone's Downloads as "resume.pdf"
+          // alongside every other candidate's.
+          download="Raghu-Khajuria-Resume.pdf"
           onClick={() => playClick()}
           className="group flex items-center justify-center gap-2.5 border-2 px-5 py-3.5 font-stencil text-sm font-semibold uppercase tracking-[0.2em] transition-colors"
           style={{ color, borderColor: color }}

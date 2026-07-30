@@ -48,6 +48,11 @@ function CrateCard({ p, index, onOpen }: { p: Project; index: number; onOpen: ()
             {p.name}
           </h4>
           <p className="mt-0.5 truncate font-mono text-[11px] text-white/45">{p.short}</p>
+          {p.status && (
+            <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">
+              {p.status}
+            </p>
+          )}
         </div>
 
         <span
@@ -113,6 +118,11 @@ function Detail({ p, onBack }: { p: Project; onBack: () => void }) {
           <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/30">
             crate · {p.crate}
           </span>
+          {p.status && (
+            <span className="border border-white/15 bg-white/[0.04] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-white/50">
+              {p.status}
+            </span>
+          )}
         </div>
         <h3 className="hud-title mt-1.5 text-2xl font-bold text-white sm:text-3xl">{p.name}</h3>
         <p className="mt-2 text-[13.5px] leading-relaxed text-white/70">{p.summary}</p>

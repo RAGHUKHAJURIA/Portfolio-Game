@@ -1,4 +1,4 @@
-﻿import { readFileSync } from 'node:fs'
+﻿import { existsSync, readFileSync } from 'node:fs'
 import {
   BoxGeometry,
   Frustum,
@@ -7,7 +7,7 @@ import {
   MeshBasicMaterial,
   PerspectiveCamera,
 } from 'three'
-import { houses, ISLAND, projects, loadout, timeline } from '../src/data/portfolioData.ts'
+import { houses, ISLAND, projects, loadout, timeline, profile, contactChannels } from '../src/data/portfolioData.ts'
 import { terrainHeight, pathStrength, houseGroundY, INLETS, isSubmerged } from '../src/lib/terrain.ts'
 
 /** Inside a declared water inlet, where being under the waterline is the point. */
@@ -215,13 +215,36 @@ console.log('\n--- instanced prop batches are not frustum-culled ---')
 
 console.log('\n--- content ---')
 check('7 projects', projects.length === 7)
-check('all projects have bullets', projects.every((p) => p.bullets.length >= 3))
-check('all projects have stack', projects.every((p) => p.stack.length >= 4))
+// These floors exist to catch a half-filled entry, not to enforce a house
+// style. Lowered from 3/4: a crate that bundles small front-end studies has
+// legitimately less to say than a multi-engine platform, and padding it to
+// hit an arbitrary count is how a portfolio starts sounding inflated.
+check('all projects have bullets', projects.every((p) => p.bullets.length >= 2))
+check('all projects have stack', projects.every((p) => p.stack.length >= 2))
+check('all projects have a summary', projects.every((p) => p.summary.length > 40))
+// Every link must be a real absolute URL — a typo here is invisible until a
+// recruiter clicks it.
+check(
+  'all project links are absolute URLs',
+  projects.every((p) => p.links.every((l) => /^https:\/\/\S+$/.test(l.url))),
+  projects.flatMap((p) => p.links.filter((l) => !/^https:\/\/\S+$/.test(l.url)).map((l) => l.url)).join(' ')
+)
 check('unique project ids', new Set(projects.map((p) => p.id)).size === projects.length)
 check('5 loadout slots', loadout.length === 5)
 check('levels in 1..5', loadout.every((s) => s.items.every((i) => i.level >= 1 && i.level <= 5)))
 check('timeline non-empty', timeline.length >= 3)
 check('5 houses', houses.length === 5)
+
+// The resume is served from public/. Left at the project root it 404s in a
+// build even though it works in the dev server, which is exactly the kind of
+// break nobody notices until someone tries to download it.
+check('resume.pdf is in public/', existsSync(new URL('../public/resume.pdf', import.meta.url)))
+check('resumeUrl points at it', profile.resumeUrl === '/resume.pdf')
+check(
+  'contact channels are absolute URLs or mailto',
+  contactChannels.every((c) => /^(https:\/\/|mailto:)\S+$/.test(c.href)),
+  contactChannels.filter((c) => !/^(https:\/\/|mailto:)\S+$/.test(c.href)).map((c) => c.id).join(' ')
+)
 
 console.log(`\n${fail === 0 ? 'âœ… all checks passed' : `âŒ ${fail} check(s) failed`}`)
 process.exit(fail === 0 ? 0 : 1)
