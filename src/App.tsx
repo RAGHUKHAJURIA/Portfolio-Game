@@ -8,6 +8,7 @@ import { Island } from './components/experience/Island'
 import { Character } from './components/experience/Character'
 import { CameraRig } from './components/experience/CameraRig'
 import { Lighting } from './components/experience/Lighting'
+import { PostFx } from './components/experience/PostFx'
 import { ProximitySystem } from './hooks/useProximity'
 
 import { LoadingScreen } from './components/ui/LoadingScreen'
@@ -50,6 +51,8 @@ function Scene() {
         <CameraRig />
       </Physics>
       <ProximitySystem />
+      {/* Last, so the composer's render pass sees the finished scene. */}
+      <PostFx />
       <Preload all />
     </>
   )
@@ -97,6 +100,14 @@ export default function App() {
           toneMappingExposure: 1.02,
         }}
         camera={{ fov: 55, near: 0.1, far: 900, position: [10, 12, 22] }}
+        // `?debug` hands the renderer to scripts/visual-check.mjs so it can
+        // assert on draw calls and culling instead of eyeballing screenshots.
+        // Opt-in by query string because `verify` runs the production build.
+        onCreated={(s) => {
+          if (new URLSearchParams(location.search).has('debug')) {
+            ;(window as unknown as { __r3f?: unknown }).__r3f = s
+          }
+        }}
       >
         <Suspense fallback={null}>
           <Scene />

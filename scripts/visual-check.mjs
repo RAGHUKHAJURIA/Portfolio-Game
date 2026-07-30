@@ -5,12 +5,16 @@
  * the run.
  *
  *   node scripts/visual-check.mjs [baseUrl] [outDir]
+ *
+ * `QUICK=1` stops after landing and one look-around. Software WebGL takes ten
+ * minutes over the full pass, which is too slow a loop for tuning lighting.
  */
 import { chromium } from 'playwright'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
 const base = process.argv[2] ?? 'http://localhost:4173'
 const outDir = process.argv[3] ?? 'shots'
+const quick = !!process.env.QUICK
 mkdirSync(outDir, { recursive: true })
 
 const errors = []
@@ -61,7 +65,7 @@ const shot = async (name, target = page) => {
 const wait = (ms) => page.waitForTimeout(ms)
 
 console.log(`Loading ${base} ...`)
-await page.goto(base, { waitUntil: 'load', timeout: 60000 })
+await page.goto(`${base}?debug`, { waitUntil: 'load', timeout: 60000 })
 
 // Confirm WebGL actually came up.
 const glInfo = await page.evaluate(() => {
@@ -96,18 +100,76 @@ const box = await (await page.$('canvas')).boundingBox()
 const cx = box.x + box.width / 2
 const cy = box.y + box.height / 2
 
-// Look around.
-await page.mouse.move(cx, cy)
-await page.mouse.down()
-await page.mouse.move(cx + 260, cy + 40, { steps: 18 })
-await page.mouse.up()
-await wait(800)
+/**
+ * Orbit sweep — the regression test for props vanishing at certain camera
+ * angles.
+ *
+ * The assertion is on the batches themselves, not on draw calls: the scene is
+ * mostly individual house meshes, and honest per-mesh culling swings the
+ * draw-call count by hundreds as buildings leave the view, so a cliff in that
+ * number proves nothing. What does prove something is that no InstancedMesh is
+ * still trusting a bounding sphere computed while its count was 0 — an empty
+ * sphere passes the frustum test only when the world origin is on screen, which
+ * is what made every tree and rock blink out when you turned around.
+ */
+const probe = () =>
+  page.evaluate(() => {
+    const s = window.__r3f
+    if (!s) return null
+    const { gl, scene } = s.getState ? s.getState() : s
+    const bad = []
+    let batches = 0
+    scene.traverse((o) => {
+      if (!o.isInstancedMesh || !o.visible) return
+      batches++
+      // Either culling is off, or the cached sphere actually covers the batch.
+      if (o.frustumCulled && !(o.boundingSphere && o.boundingSphere.radius > 0)) {
+        bad.push(`${o.name || o.type} r=${o.boundingSphere?.radius}`)
+      }
+    })
+    return { calls: gl.info.render.calls, batches, bad }
+  })
+
+const sweep = []
+for (let step = 0; step < (quick ? 2 : 8); step++) {
+  await page.mouse.move(cx, cy)
+  await page.mouse.down()
+  // 45° of yaw per step, with the pitch dipped and raised on the way round.
+  // Keep the swing modest or the pitch clamp pins the sweep to a top-down view.
+  await page.mouse.move(cx + 300, cy + [0, 70, 0, -70][step % 4], { steps: 10 })
+  await page.mouse.up()
+  if (step === 2) await page.mouse.wheel(0, -600) // zoom in
+  if (step === 5) await page.mouse.wheel(0, 900) // and back out
+  await wait(700)
+  const p = await probe()
+  if (!p) {
+    errors.push('debug hook missing — cannot verify camera-angle culling')
+    break
+  }
+  // Draw calls are not reported: with the effect composer in the pipeline,
+  // `info.render.calls` reflects only the last fullscreen pass.
+  sweep.push(`${p.batches}b`)
+  // 12 prop batches from Props.tsx plus the dust pool. A drop here means the
+  // traverse found nothing and the assertion below is vacuous.
+  if (p.batches < 13) errors.push(`only ${p.batches} instanced batches in the scene — expected 13`)
+  if (p.bad.length) {
+    errors.push(`instanced batch with an empty bounding sphere: ${p.bad.join(', ')}`)
+  }
+  if (step === 0 || step === 4) await shot(`04-orbit-${step}`)
+}
+console.log(`Orbit sweep (live instanced batches): ${sweep.join(', ')}`)
 await shot('04-look')
 
 // Walk, then sprint.
 await page.keyboard.down('KeyW')
 await wait(1600)
 await shot('05-walking')
+if (quick) {
+  await page.keyboard.up('KeyW')
+  await browser.close()
+  console.log(errors.length ? `\nQUICK FAIL\n  x ${errors.join('\n  x ')}` : '\nQUICK PASS')
+  process.exit(errors.length ? 1 : 0)
+}
 await page.keyboard.down('ShiftLeft')
 await wait(1600)
 await shot('06-sprinting')

@@ -1,4 +1,13 @@
-﻿import { houses, ISLAND, projects, loadout, timeline } from '../src/data/portfolioData.ts'
+﻿import { readFileSync } from 'node:fs'
+import {
+  BoxGeometry,
+  Frustum,
+  InstancedMesh,
+  Matrix4,
+  MeshBasicMaterial,
+  PerspectiveCamera,
+} from 'three'
+import { houses, ISLAND, projects, loadout, timeline } from '../src/data/portfolioData.ts'
 import { terrainHeight, pathStrength, houseGroundY } from '../src/lib/terrain.ts'
 
 let fail = 0
@@ -118,6 +127,40 @@ for (const h of houses) {
 }
 const angle = (Math.atan(worst) * 180) / Math.PI
 check('trails climbable (< 58Â° controller limit)', angle < 50, `steepest=${angle.toFixed(1)}Â°`)
+
+console.log('\n--- instanced prop batches are not frustum-culled ---')
+// The "props vanish at certain camera angles" bug. drei's <Instances> has
+// count = 0 on its first frame; three computes an InstancedMesh's bounding
+// sphere once, lazily, from that count, and caches an *empty* sphere forever.
+// An empty sphere (radius -1) only passes the frustum test when the world
+// origin is on screen, so every batch pops out when you look away from (0,0,0).
+{
+  const im = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial(), 100)
+  im.count = 0
+  im.computeBoundingSphere()
+  check(
+    'three still caches an empty sphere at count=0 (workaround still needed)',
+    im.boundingSphere!.radius < 0,
+    `r=${im.boundingSphere!.radius}`
+  )
+
+  const cam = new PerspectiveCamera(55, 1.6, 0.1, 900)
+  cam.position.set(0, 10, 30)
+  cam.lookAt(0, 0, 60) // origin behind the camera
+  cam.updateMatrixWorld()
+  cam.updateProjectionMatrix()
+  const f = new Frustum().setFromProjectionMatrix(
+    new Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse)
+  )
+  check('… and that sphere is culled looking away from the origin', !f.intersectsObject(im))
+
+  const props = readFileSync(new URL('../src/components/experience/Props.tsx', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '') // the comments talk about <Instances> too
+  const wrapper = /function Batch\([\s\S]*?<Instances frustumCulled={false}/.test(props)
+  const bare = props.match(/<Instances (?!frustumCulled)/g)?.length ?? 0
+  check('Props.tsx routes batches through <Batch frustumCulled={false}>', wrapper)
+  check('no bare <Instances> left in Props.tsx', bare === 0, `found ${bare}`)
+}
 
 console.log('\n--- content ---')
 check('7 projects', projects.length === 7)

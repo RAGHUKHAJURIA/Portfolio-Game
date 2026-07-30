@@ -66,8 +66,13 @@ export function HouseMarker({ meta, groundY, labelHeight }: Props) {
 
   return (
     <group position={[mx, groundY, mz]}>
-      {/* Interaction radius */}
-      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
+      {/* Interaction radius.
+          The four decals below are additive, depth-write-off and almost
+          coplanar, so left to three's distance sort they swap order as the
+          camera moves and flicker. Explicit renderOrder pins the stack:
+          wash → pulse → ring → beam, all after opaque geometry and before
+          the zone wall (renderOrder 5). */}
+      <mesh ref={ring} renderOrder={3} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
         <ringGeometry args={[meta.radius - 0.28, meta.radius, 56]} />
         <meshBasicMaterial
           color={meta.color}
@@ -79,7 +84,7 @@ export function HouseMarker({ meta, groundY, labelHeight }: Props) {
       </mesh>
 
       {/* Sonar pulse */}
-      <mesh ref={innerRing} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+      <mesh ref={innerRing} renderOrder={2} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
         <ringGeometry args={[meta.radius - 0.16, meta.radius, 48]} />
         <meshBasicMaterial
           color={meta.color}
@@ -91,7 +96,7 @@ export function HouseMarker({ meta, groundY, labelHeight }: Props) {
       </mesh>
 
       {/* Soft floor wash */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+      <mesh renderOrder={1} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
         <circleGeometry args={[meta.radius, 40]} />
         <meshBasicMaterial
           color={meta.color}
@@ -103,7 +108,7 @@ export function HouseMarker({ meta, groundY, labelHeight }: Props) {
       </mesh>
 
       {/* Light column */}
-      <mesh ref={beam} position={[0, labelHeight * 0.5, 0]}>
+      <mesh ref={beam} renderOrder={4} position={[0, labelHeight * 0.5, 0]}>
         <cylinderGeometry args={[meta.radius * 0.34, meta.radius * 0.5, labelHeight, 18, 1, true]} />
         <meshBasicMaterial
           color={meta.color}

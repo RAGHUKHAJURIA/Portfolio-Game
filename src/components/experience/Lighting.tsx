@@ -1,11 +1,23 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Sky } from '@react-three/drei'
+import { Environment, Sky } from '@react-three/drei'
 import type { DirectionalLight, PointLight } from 'three'
 import { Vector3 } from 'three'
 import { cameraOrbit, playerState } from '../../state/controls'
 
 const SUN = new Vector3(-52, 46, -38)
+
+/** Shared by the visible sky and the one baked into the environment map. */
+const SKY = {
+  distance: 4000,
+  sunPosition: [SUN.x, SUN.y, SUN.z] as [number, number, number],
+  inclination: 0.49,
+  azimuth: 0.25,
+  turbidity: 7,
+  rayleigh: 1.4,
+  mieCoefficient: 0.006,
+  mieDirectionalG: 0.82,
+}
 
 /**
  * Late-afternoon island light: warm low sun, cool sky fill, heavy haze.
@@ -43,21 +55,39 @@ export function Lighting() {
 
   return (
     <>
-      <Sky
-        distance={4000}
-        sunPosition={[SUN.x, SUN.y, SUN.z]}
-        inclination={0.49}
-        azimuth={0.25}
-        turbidity={7}
-        rayleigh={1.4}
-        mieCoefficient={0.006}
-        mieDirectionalG={0.82}
-      />
+      <Sky {...SKY} />
+
+      {/* Image-based lighting, baked from the sky that's actually on screen.
+          A downloaded HDRI would be a megabytes-sized fetch that has to
+          succeed before the island looks right, and it would light the scene
+          from a different sky than the one the player can see. Rendering the
+          existing <Sky> to a small cubemap once costs nothing after frame one
+          and gives every PBR material real sky ambient and reflections. */}
+      {/* `far` matters: the portal's cube camera defaults to far = 1000 and the
+          sky dome sits at 4000, so on the default it captures nothing and the
+          environment map comes out black. */}
+      {/* `environmentIntensity` is not optional here. The Preetham sky shader
+          emits radiance well above 1, and the cube camera captures it raw —
+          three skips tone mapping when rendering into a render target. At full
+          strength that HDR sky floods every surface with uniform diffuse light
+          and the island comes out milky with no shadow contrast. */}
+      <Environment
+        frames={1}
+        resolution={128}
+        background={false}
+        far={9000}
+        environmentIntensity={0.38}
+      >
+        <Sky {...SKY} />
+      </Environment>
 
       <fogExp2 attach="fog" args={['#a9b6bd', 0.0085]} />
 
-      <hemisphereLight args={['#c3daea', '#57603c', 1.0]} />
-      <ambientLight intensity={0.4} color="#dfe6ea" />
+      {/* Trimmed hard from 1.0/0.4: the environment map now supplies the sky
+          bounce these two were faking, and stacking all three flattens the
+          scene. The sun goes up to buy the contrast back. */}
+      <hemisphereLight args={['#c3daea', '#57603c', 0.38]} />
+      <ambientLight intensity={0.1} color="#dfe6ea" />
 
       {/* Follows the camera side of the player — see useFrame above. */}
       <pointLight ref={fill} intensity={11} distance={11} decay={1.6} color="#ffeacd" />
@@ -65,7 +95,7 @@ export function Lighting() {
       <directionalLight
         ref={sun}
         castShadow
-        intensity={2.1}
+        intensity={2.6}
         color="#ffe6bd"
         position={[SUN.x, SUN.y, SUN.z]}
         shadow-mapSize={[2048, 2048]}

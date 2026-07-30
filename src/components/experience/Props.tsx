@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react'
 import { Instance, Instances } from '@react-three/drei'
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
 import {
@@ -20,13 +21,33 @@ import { terrainHeight } from '../../lib/terrain'
  */
 const cap = (n: number) => Math.max(1, n)
 
+/**
+ * Every prop batch goes through here, because bare `<Instances>` disappears.
+ *
+ * drei's `<Instances>` still has `count = 0` on the first frame — its children
+ * subscribe from a layout effect, so the parent's `instances` state is empty
+ * until the following render. three.js computes an InstancedMesh's bounding
+ * sphere once, lazily, from whatever `count` is at that moment, and `count = 0`
+ * yields an *empty* sphere (centre = origin, radius = −1) which is then cached
+ * forever. `Frustum.intersectsSphere` on a −1 radius passes only when the world
+ * origin is at least a unit inside every frustum plane, so the whole batch pops
+ * out of existence the moment you look away from (0, 0, 0).
+ *
+ * Batch-level culling never fires for a batch that spans the whole island
+ * anyway, so switching it off costs nothing. `scripts/smoke.ts` pins the
+ * three.js behaviour this works around.
+ */
+function Batch(props: ComponentProps<typeof Instances>) {
+  return <Instances frustumCulled={false} {...props} />
+}
+
 /* ── Vegetation ─────────────────────────────────────────── */
 
 function Trees() {
   return (
     <>
       {/* Trunks (shared across both tree types) */}
-      <Instances limit={cap(TREES.length)} range={TREES.length} castShadow receiveShadow>
+      <Batch limit={cap(TREES.length)} range={TREES.length} castShadow receiveShadow>
         <cylinderGeometry args={[0.13, 0.22, 2.6, 6]} />
         <meshStandardMaterial color="#4a3a28" roughness={1} flatShading />
         {TREES.map((t, i) => (
@@ -37,11 +58,11 @@ function Trees() {
             scale={[t.scale, t.scale, t.scale]}
           />
         ))}
-      </Instances>
+      </Batch>
 
       {/* Conifer canopies — stacked cones */}
       {[0, 1, 2].map((tier) => (
-        <Instances key={tier} limit={cap(PINES.length)} range={PINES.length} castShadow receiveShadow>
+        <Batch key={tier} limit={cap(PINES.length)} range={PINES.length} castShadow receiveShadow>
           <coneGeometry args={[1.5 - tier * 0.38, 1.9 - tier * 0.25, 7]} />
           <meshStandardMaterial
             color={tier === 0 ? '#354a2b' : tier === 1 ? '#3e5531' : '#4a613a'}
@@ -56,11 +77,11 @@ function Trees() {
               scale={[t.scale, t.scale, t.scale]}
             />
           ))}
-        </Instances>
+        </Batch>
       ))}
 
       {/* Broadleaf canopies — chunky low-poly blobs */}
-      <Instances limit={cap(BROADLEAF.length)} range={BROADLEAF.length} castShadow receiveShadow>
+      <Batch limit={cap(BROADLEAF.length)} range={BROADLEAF.length} castShadow receiveShadow>
         <icosahedronGeometry args={[1.6, 0]} />
         <meshStandardMaterial color="#425734" roughness={1} flatShading />
         {BROADLEAF.map((t, i) => (
@@ -71,8 +92,8 @@ function Trees() {
             scale={[t.scale * 1.1, t.scale * 0.85, t.scale * 1.1]}
           />
         ))}
-      </Instances>
-      <Instances limit={cap(BROADLEAF.length)} range={BROADLEAF.length} castShadow>
+      </Batch>
+      <Batch limit={cap(BROADLEAF.length)} range={BROADLEAF.length} castShadow>
         <icosahedronGeometry args={[1.1, 0]} />
         <meshStandardMaterial color="#51683d" roughness={1} flatShading />
         {BROADLEAF.map((t, i) => (
@@ -83,7 +104,7 @@ function Trees() {
             scale={[t.scale, t.scale, t.scale]}
           />
         ))}
-      </Instances>
+      </Batch>
 
       {/* Trunk collision, batched into one static body. Sized to the actual
           trunk — an oversized box here reads as an invisible wall. The
@@ -104,7 +125,7 @@ function Trees() {
 
 function Bushes() {
   return (
-    <Instances limit={cap(BUSHES.length)} range={BUSHES.length} castShadow receiveShadow>
+    <Batch limit={cap(BUSHES.length)} range={BUSHES.length} castShadow receiveShadow>
       <icosahedronGeometry args={[0.62, 0]} />
       <meshStandardMaterial color="#455631" roughness={1} flatShading />
       {BUSHES.map((b, i) => (
@@ -115,7 +136,7 @@ function Bushes() {
           scale={[b.scale * 1.25, b.scale * 0.8, b.scale * 1.25]}
         />
       ))}
-    </Instances>
+    </Batch>
   )
 }
 
@@ -124,7 +145,7 @@ function Rocks() {
 
   return (
     <>
-      <Instances limit={cap(ROCKS.length)} range={ROCKS.length} castShadow receiveShadow>
+      <Batch limit={cap(ROCKS.length)} range={ROCKS.length} castShadow receiveShadow>
         <dodecahedronGeometry args={[0.85, 0]} />
         <meshStandardMaterial color="#6e6d64" roughness={0.95} flatShading />
         {ROCKS.map((r, i) => (
@@ -135,7 +156,7 @@ function Rocks() {
             scale={[r.scale * 1.2, r.scale * 0.85, r.scale]}
           />
         ))}
-      </Instances>
+      </Batch>
       <RigidBody type="fixed" colliders={false}>
         {big.map((r, i) => (
           <CuboidCollider
@@ -151,7 +172,7 @@ function Rocks() {
 
 function GrassTufts() {
   return (
-    <Instances limit={cap(TUFTS.length)} range={TUFTS.length} receiveShadow>
+    <Batch limit={cap(TUFTS.length)} range={TUFTS.length} receiveShadow>
       <coneGeometry args={[0.22, 0.65, 4]} />
       <meshStandardMaterial color="#74854a" roughness={1} flatShading />
       {TUFTS.map((g, i) => (
@@ -162,7 +183,7 @@ function GrassTufts() {
           scale={[g.scale, g.scale, g.scale]}
         />
       ))}
-    </Instances>
+    </Batch>
   )
 }
 
@@ -170,7 +191,7 @@ function GrassTufts() {
 
 function ShoreRocks() {
   return (
-    <Instances limit={cap(SHORE_ROCKS.length)} range={SHORE_ROCKS.length} castShadow receiveShadow>
+    <Batch limit={cap(SHORE_ROCKS.length)} range={SHORE_ROCKS.length} castShadow receiveShadow>
       <dodecahedronGeometry args={[1.1, 0]} />
       <meshStandardMaterial color="#615f57" roughness={0.95} flatShading />
       {SHORE_ROCKS.map((r, i) => (
@@ -181,7 +202,7 @@ function ShoreRocks() {
           scale={[r.scale * 1.3, r.scale, r.scale * 1.1]}
         />
       ))}
-    </Instances>
+    </Batch>
   )
 }
 
@@ -189,20 +210,20 @@ function ShoreRocks() {
 function BoundaryPosts() {
   return (
     <>
-      <Instances limit={cap(BOUNDARY_POSTS.length)} range={BOUNDARY_POSTS.length} castShadow>
+      <Batch limit={cap(BOUNDARY_POSTS.length)} range={BOUNDARY_POSTS.length} castShadow>
         <cylinderGeometry args={[0.07, 0.07, 1.5, 5]} />
         <meshStandardMaterial color="#d8d5cc" roughness={0.9} />
         {BOUNDARY_POSTS.map((p, i) => (
           <Instance key={i} position={[p.x, p.y + 0.75, p.z]} />
         ))}
-      </Instances>
-      <Instances limit={cap(BOUNDARY_POSTS.length)} range={BOUNDARY_POSTS.length}>
+      </Batch>
+      <Batch limit={cap(BOUNDARY_POSTS.length)} range={BOUNDARY_POSTS.length}>
         <cylinderGeometry args={[0.075, 0.075, 0.42, 5]} />
         <meshStandardMaterial color="#c0392b" roughness={0.9} />
         {BOUNDARY_POSTS.map((p, i) => (
           <Instance key={i} position={[p.x, p.y + 1.1, p.z]} />
         ))}
-      </Instances>
+      </Batch>
     </>
   )
 }

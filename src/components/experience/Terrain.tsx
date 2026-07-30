@@ -1,11 +1,14 @@
 import { useMemo } from 'react'
-import { BufferAttribute, PlaneGeometry } from 'three'
+import { BufferAttribute, PlaneGeometry, Vector2 } from 'three'
 import { RigidBody } from '@react-three/rapier'
 import { ISLAND } from '../../data/portfolioData'
 import { groundColor, terrainHeight } from '../../lib/terrain'
+import { tiled } from '../../lib/textures'
 
 const SEGMENTS = 72
 const SIZE = ISLAND.half * 2
+/** Gentle — the terrain silhouette is the art, this is just grain on top. */
+const NORMAL_SCALE = new Vector2(0.55, 0.55)
 
 /**
  * The island ground. One geometry serves both rendering and physics — the
@@ -48,6 +51,11 @@ export function Terrain() {
     return geo
   }, [])
 
+  // 72 segments over 124 units puts a vertex every 1.7m, so the ground is
+  // otherwise one enormous untextured facet per step. A high tile count of the
+  // shared detail normal gives it grain without another geometry pass.
+  const detail = useMemo(() => tiled('normal', 52), [])
+
   return (
     <RigidBody type="fixed" colliders="trimesh" friction={1}>
       <mesh geometry={geometry} receiveShadow castShadow>
@@ -57,6 +65,8 @@ export function Terrain() {
           roughness={0.95}
           metalness={0}
           dithering
+          normalMap={detail}
+          normalScale={NORMAL_SCALE}
         />
       </mesh>
     </RigidBody>
