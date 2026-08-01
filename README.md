@@ -180,6 +180,41 @@ same object.
 
 ---
 
+## Swapping in a downloaded character model
+
+The operator in `CharacterModel.tsx` is hand-built from boxes with a
+code-driven gait. Everything around it — the pose state machine, the damped
+blending, the aim pose, the weapon attach point, foot planting, head tracking
+— is independent of how the body is drawn, and is what a real rigged model
+would plug into.
+
+Two steps have to happen outside this repo, because they need a browser
+session, an Adobe account and a mesh toolchain:
+
+1. **Source a rigged mesh.** Sketchfab, filtered to CC0 or CC-BY +
+   downloadable + rigged. Search "tactical soldier", "PMC character", "swat
+   operator". Prefer one that already carries a humanoid skeleton. Aim for
+   8k–15k triangles and one or two 2K material slots — there is only ever one
+   character on screen, so it can afford far more than the instanced props.
+   Do not use ripped PUBG character art; the silhouette (helmet, plate
+   carrier, pack, gloves, boots) is what reads, not the specific skin.
+2. **Rig and animate.** If it arrives unrigged, run it through Mixamo's
+   auto-rigger, then pull clips: idle, walk, run, sprint, jump, aim-idle,
+   aim-walk, fire. Export FBX with skin and convert to `.glb`.
+
+This machine has no Blender, no `FBX2glTF` and no `gltf-transform`, so the
+conversion cannot be scripted here yet. Install one of them and the pipeline
+becomes a few lines; until then it is a manual export.
+
+Drop the result at `public/models/operator.glb` and the wiring — `useGLTF`,
+clip binding, bone-masked upper/lower layering, and rebinding the weapon
+socket to the right hand bone — is a contained change to one file. It is
+deliberately not written in advance: animation-layer code that has never been
+run against a real skeleton is guesswork, and clip names, bone names and rest
+poses all differ per model.
+
+---
+
 ## Deploying to Vercel
 
 Everything is configured. `vercel.json` sets the Vite preset, `dist` output,

@@ -2,28 +2,101 @@ import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group, Mesh } from 'three'
 import { MeshStandardMaterial, Vector2 } from 'three'
-import { playerState } from '../../state/controls'
-import { CHUTE_ALTITUDE } from '../../lib/constants'
+import { cameraOrbit, playerState } from '../../state/controls'
+import { CHUTE_ALTITUDE, FEET_OFFSET } from '../../lib/constants'
 import { tiled } from '../../lib/textures'
+import { terrainHeight } from '../../lib/terrain'
+import { insideHouse } from './houses/HouseInterior'
 
 /**
  * A hand-built low-poly operator. Deliberately not a downloaded rig — the
- * whole scene is procedural, so the character is boxes and a code-driven
- * gait rather than a Mixamo GLB. Keeps the silhouette consistent with the
- * island and the download at zero bytes.
+ * whole scene is procedural, so the character is boxes and a code-driven gait
+ * rather than a Mixamo GLB.
  *
- * On animation blending: the brief asks for crossfades rather than hard cuts,
- * via drei's mixer. There are no clips to mix — the pose is computed, not
- * sampled — so the equivalent is done directly: every pose parameter (stride,
- * arm swing, lean, aim) is critically damped toward its target instead of
- * being switched, which is what a crossfade is actually for. Reaching for
- * `useAnimations` would mean shipping a rigged GLB and giving up the
- * zero-asset property for no visible gain.
+ * ── Anatomy ────────────────────────────────────────────────
+ * The first version of this read as a featureless pawn, for three concrete
+ * reasons, all fixed here:
+ *
+ *  1. The arms were *inside* the torso silhouette. Shoulders sat at x = ±0.34
+ *     with a half-width of 0.085, so the outer edge landed at 0.425 against a
+ *     vest half-width of 0.28 — the limbs never broke the outline. Shoulders
+ *     are now outboard of the vest with a visible gap, and the torso is
+ *     narrower than the shoulder span.
+ *  2. Nothing bent. Each limb was one rigid group rotating at the hip or
+ *     shoulder, so legs swung like sticks. Every limb is now two segments with
+ *     a real joint between them — `kneeL/R` and `elbowL/R` — and the gait
+ *     drives knee flexion on the swing phase and elbow flexion throughout.
+ *  3. The weapon was parented to the chest, floating 0.28 above the hands and
+ *     0.16 to one side, attached to nothing. It now hangs off the right hand
+ *     group, so it tracks the arm through every pose by construction, and the
+ *     left arm is posed to meet the handguard.
+ *
+ * Proportions are 7 heads tall (1.82 units, head 0.26), which is the standard
+ * heroic-realistic figure — the old rig was nearer 6.3 and read as stumpy.
+ * Model space has y = 0 at the soles; Character mounts this at -FEET_OFFSET.
+ *
+ * ── Animation ──────────────────────────────────────────────
+ * There are no clips to crossfade, because the pose is computed rather than
+ * sampled. Every pose parameter is critically damped toward its target instead
+ * of switched, which is what a crossfade is for.
  */
+
+/* ── Skeleton dimensions. Everything else is derived from these. ── */
+const HIP_Y = 1.02
+const THIGH = 0.46
+const SHIN = 0.42
+const SHOULDER_X = 0.33
+const SHOULDER_Y = 0.4
+const UPPER_ARM = 0.36
+const FOREARM = 0.3
+/** Chest-local y of the neck joint and the head pivot. */
+const NECK_Y = 0.46
+const HEAD_Y = 0.54
 
 /** Frame-rate independent approach. */
 const damp = (cur: number, target: number, dt: number, rate: number) =>
   cur + (target - cur) * (1 - Math.exp(-dt * rate))
+
+/** Half the stance width — the lateral offset of each foot from the centreline. */
+const HALF_STANCE = 0.16
+/** How far a leg may drop to reach lower ground before it just floats. */
+const MAX_FOOT_DROP = 0.4
+/** Clamp on how far the head turns away from the body, in radians. */
+const MAX_HEAD_TURN = 0.7
+
+/**
+ * Arm poses, as [shoulder.x, shoulder.y, shoulder.z, elbow.x].
+ *
+ * Kept in one table because these are the numbers that get tuned by eye, and
+ * hunting them down inside the frame loop is miserable. `lowered` is the
+ * patrol carry, `aimed` is shouldered. The rifle rides the right hand, so the
+ * right pair positions the weapon and the left pair reaches for the handguard.
+ */
+/*
+ * Sign note, because it is easy to get backwards and the result looks absurd:
+ * a limb hangs along local -y, and rotating a joint by +x swings the far end
+ * toward -z, i.e. *backwards*. That is what a knee does, so knee flexion is
+ * positive. An elbow bends the other way, so elbow flexion is NEGATIVE. The
+ * first pass had these positive and the arms hyperextended, which pointed the
+ * muzzle back over the character's own shoulder.
+ *
+ * Shoulders stay close to hanging and the elbows do the work — an upper arm
+ * extended out front puts the elbow somewhere no shooter's elbow goes.
+ */
+const POSE = {
+  rightLowered: [-0.3, 0, -0.15, -1.2] as const,
+  rightAimed: [-0.55, -0.15, -0.22, -1.55] as const,
+  leftLowered: [-0.5, 0.34, 0.3, -1.3] as const,
+  leftAimed: [-0.75, 0.46, 0.42, -1.28] as const,
+}
+
+/** Shortest signed angle from `from` to `to`. */
+const shortestAngle = (from: number, to: number) => {
+  let d = (to - from) % (Math.PI * 2)
+  if (d > Math.PI) d -= Math.PI * 2
+  if (d < -Math.PI) d += Math.PI * 2
+  return d
+}
 
 const useMats = () =>
   useMemo(() => {
@@ -50,10 +123,12 @@ const useMats = () =>
       strap: mk('#2f342a', 0.95, 0, 1.6),
       boot: mk('#3a332c', 0.75, 0, 1.1),
       skin: mk('#c9976a', 0.8, 0, 0.25),
+      skinDark: mk('#a87749', 0.8, 0, 0.25),
       helmet: mk('#5c6647', 0.7, 0.1, 0.7),
       pack: mk('#75694f', 0.95, 0, 1.5),
       accent: mk('#f0a92e', 0.5, 0, 0.3),
       glass: mk('#2c4450', 0.2, 0.7, 0),
+      eye: mk('#20242a', 0.35, 0, 0),
       // Buckles, clips and weapon furniture — the only genuinely metal bits.
       buckle: mk('#8d8b84', 0.35, 0.85, 0.3),
       gunmetal: mk('#33383a', 0.45, 0.7, 0.4),
@@ -63,58 +138,100 @@ const useMats = () =>
 
 type Mats = ReturnType<typeof useMats>
 
-function Leg({ mats, side }: { mats: Mats; side: 1 | -1 }) {
+/**
+ * One leg: thigh, then a knee group carrying the shin and boot. The knee group
+ * is the joint — rotating it bends the leg at the right place, which is the
+ * whole difference between a walking figure and a swinging stick.
+ */
+function Leg({ mats, knee }: { mats: Mats; knee: React.RefObject<Group> }) {
   return (
-    <group position={[0.17 * side, 0, 0]}>
-      {/* thigh + shin as one tapered stack */}
-      <mesh castShadow position={[0, -0.22, 0]} material={mats.fatigue}>
-        <boxGeometry args={[0.24, 0.46, 0.24]} />
+    <>
+      <mesh castShadow position={[0, -THIGH / 2, 0]} material={mats.fatigue}>
+        <boxGeometry args={[0.23, THIGH, 0.25]} />
       </mesh>
-      {/* Knee pad — reads at silhouette distance and breaks the straight leg. */}
-      <mesh castShadow position={[0, -0.42, 0.11]} material={mats.vest}>
-        <boxGeometry args={[0.22, 0.16, 0.08]} />
+      {/* Thigh pocket, so the leg isn't one flat column */}
+      <mesh position={[0.11, -0.26, 0.02]} material={mats.fatigueDark}>
+        <boxGeometry args={[0.04, 0.18, 0.16]} />
       </mesh>
-      <mesh castShadow position={[0, -0.6, 0]} material={mats.fatigueDark}>
-        <boxGeometry args={[0.21, 0.36, 0.21]} />
-      </mesh>
-      {/* Boot: upper, then a sole that sits proud so the foot doesn't taper
-          into the ground. */}
-      <mesh castShadow position={[0, -0.81, 0.04]} material={mats.boot}>
-        <boxGeometry args={[0.24, 0.13, 0.32]} />
-      </mesh>
-      <mesh castShadow position={[0, -0.89, 0.05]} material={mats.polymer}>
-        <boxGeometry args={[0.26, 0.05, 0.35]} />
-      </mesh>
-      {/* Laces */}
-      <mesh position={[0, -0.78, 0.2]} material={mats.strap}>
-        <boxGeometry args={[0.2, 0.09, 0.02]} />
-      </mesh>
-    </group>
+
+      <group ref={knee} position={[0, -THIGH, 0]}>
+        {/* Knee pad sits on the joint itself */}
+        <mesh castShadow position={[0, -0.03, 0.11]} material={mats.vest}>
+          <boxGeometry args={[0.21, 0.16, 0.08]} />
+        </mesh>
+        <mesh castShadow position={[0, -SHIN / 2, 0]} material={mats.fatigueDark}>
+          <boxGeometry args={[0.2, SHIN, 0.21]} />
+        </mesh>
+        {/* Boot cuff, boot, and a sole proud of it so the foot reads */}
+        <mesh position={[0, -SHIN + 0.03, 0]} material={mats.boot}>
+          <boxGeometry args={[0.22, 0.1, 0.23]} />
+        </mesh>
+        <mesh castShadow position={[0, -SHIN - 0.05, 0.03]} material={mats.boot}>
+          <boxGeometry args={[0.23, 0.14, 0.32]} />
+        </mesh>
+        <mesh castShadow position={[0, -SHIN - 0.135, 0.04]} material={mats.polymer}>
+          <boxGeometry args={[0.25, 0.05, 0.35]} />
+        </mesh>
+        <mesh position={[0, -SHIN - 0.02, 0.16]} material={mats.strap}>
+          <boxGeometry args={[0.19, 0.08, 0.02]} />
+        </mesh>
+      </group>
+    </>
   )
 }
 
-function Arm({ mats, side }: { mats: Mats; side: 1 | -1 }) {
+/**
+ * One arm: upper arm, then an elbow group carrying the forearm and hand.
+ * `hand` is the socket a weapon attaches to.
+ */
+function Arm({
+  mats,
+  side,
+  elbow,
+  hand,
+  children,
+}: {
+  mats: Mats
+  side: 1 | -1
+  elbow: React.RefObject<Group>
+  hand: React.RefObject<Group>
+  children?: React.ReactNode
+}) {
   return (
-    <group position={[0.34 * side, 0.02, 0]}>
-      {/* Shoulder cap, so the join doesn't read as a gap when the arm swings */}
-      <mesh castShadow position={[0, 0.01, 0]} material={mats.vest}>
-        <boxGeometry args={[0.2, 0.16, 0.22]} />
+    <>
+      {/* Shoulder pad bridges the gap to the vest so the join doesn't gape */}
+      <mesh castShadow position={[side * 0.02, 0.02, 0]} material={mats.vest}>
+        <boxGeometry args={[0.19, 0.17, 0.22]} />
       </mesh>
-      <mesh castShadow position={[0, -0.2, 0]} material={mats.fatigue}>
-        <boxGeometry args={[0.17, 0.4, 0.19]} />
+      <mesh castShadow position={[0, -UPPER_ARM / 2, 0]} material={mats.fatigue}>
+        <boxGeometry args={[0.15, UPPER_ARM, 0.17]} />
       </mesh>
-      {/* Elbow pad */}
-      <mesh castShadow position={[0, -0.38, 0.07]} material={mats.vest}>
-        <boxGeometry args={[0.16, 0.13, 0.07]} />
-      </mesh>
-      <mesh castShadow position={[0, -0.52, 0]} material={mats.fatigueDark}>
-        <boxGeometry args={[0.15, 0.28, 0.16]} />
-      </mesh>
-      {/* Glove rather than bare hand — darker, so it reads against the rifle */}
-      <mesh castShadow position={[0, -0.7, 0.01]} material={mats.boot}>
-        <boxGeometry args={[0.15, 0.14, 0.17]} />
-      </mesh>
-    </group>
+
+      <group ref={elbow} position={[0, -UPPER_ARM, 0]}>
+        {/* Elbow pad on the joint */}
+        <mesh castShadow position={[0, 0, 0.08]} material={mats.vest}>
+          <boxGeometry args={[0.15, 0.14, 0.07]} />
+        </mesh>
+        <mesh castShadow position={[0, -FOREARM / 2, 0]} material={mats.fatigueDark}>
+          <boxGeometry args={[0.13, FOREARM, 0.15]} />
+        </mesh>
+        {/* Cuff */}
+        <mesh position={[0, -FOREARM + 0.03, 0]} material={mats.strap}>
+          <boxGeometry args={[0.14, 0.06, 0.16]} />
+        </mesh>
+
+        <group ref={hand} position={[0, -FOREARM - 0.06, 0]}>
+          <mesh castShadow material={mats.boot}>
+            <boxGeometry args={[0.12, 0.14, 0.15]} />
+          </mesh>
+          {/* Thumb, so the hand is not a cube */}
+          <mesh position={[side * -0.06, 0.01, 0.05]} material={mats.boot}>
+            <boxGeometry args={[0.04, 0.08, 0.07]} />
+          </mesh>
+          {children}
+        </group>
+      </group>
+    </>
   )
 }
 
@@ -125,6 +242,9 @@ function Arm({ mats, side }: { mats: Mats; side: 1 | -1 }) {
  * box magazine, stock, and a slab optic. It is not modelled on, and is not
  * meant to resemble, any specific real firearm; a recognisable one would mean
  * replicating a trademarked design for no gain at this poly count.
+ *
+ * Authored with the barrel along +z and the pistol grip at (0, -0.11, -0.06),
+ * which is the point the right hand grips — see WEAPON_IN_HAND.
  */
 function Rifle({ mats }: { mats: Mats }) {
   return (
@@ -152,7 +272,7 @@ function Rifle({ mats }: { mats: Mats }) {
       <mesh castShadow position={[0, -0.13, 0.04]} rotation={[0.16, 0, 0]} material={mats.polymer}>
         <boxGeometry args={[0.05, 0.19, 0.08]} />
       </mesh>
-      {/* Grip */}
+      {/* Grip — the part the right hand closes around */}
       <mesh castShadow position={[0, -0.11, -0.06]} rotation={[-0.34, 0, 0]} material={mats.polymer}>
         <boxGeometry args={[0.045, 0.16, 0.06]} />
       </mesh>
@@ -171,6 +291,25 @@ function Rifle({ mats }: { mats: Mats }) {
   )
 }
 
+/**
+ * Seats the rifle in the right palm.
+ *
+ * The hand's local -y runs down the forearm, so rotating the weapon +90° about
+ * x aligns its barrel (+z) with that axis: point the arm forward and the
+ * muzzle follows. The offset then slides the grip into the palm rather than
+ * leaving the receiver centred on the wrist.
+ */
+const WEAPON_IN_HAND = {
+  position: [0, -0.05, 0.09] as [number, number, number],
+  // π/2 alone points the barrel straight down the forearm, which — once the
+  // shoulder and elbow rotations of the aimed pose are composed — comes out
+  // ~30° above horizontal (barrel direction resolves to (-0.15, 0.50, 0.85)).
+  // The extra 0.53 rad pitches it back down to level: rotating past π/2 mixes
+  // in the hand's local -z, which points world-down in that pose. Solving
+  // 0.499·cos δ - 0.860·sin δ = 0 gives δ = 0.53.
+  rotation: [Math.PI / 2 + 0.53, 0, 0] as [number, number, number],
+}
+
 export function CharacterModel({ dropping }: { dropping: boolean }) {
   const root = useRef<Group>(null)
   const hips = useRef<Group>(null)
@@ -178,11 +317,16 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
   const head = useRef<Group>(null)
   const legL = useRef<Group>(null)
   const legR = useRef<Group>(null)
+  const kneeL = useRef<Group>(null)
+  const kneeR = useRef<Group>(null)
   const armL = useRef<Group>(null)
   const armR = useRef<Group>(null)
+  const elbowL = useRef<Group>(null)
+  const elbowR = useRef<Group>(null)
+  const handR = useRef<Group>(null)
+  const handL = useRef<Group>(null)
   const chute = useRef<Group>(null)
   const pack = useRef<Group>(null)
-  const weapon = useRef<Group>(null)
   const glow = useRef<Mesh>(null)
 
   const mats = useMats()
@@ -194,6 +338,11 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
   const armSwingRef = useRef(0)
   const leanRef = useRef(0)
   const aimRef = useRef(0)
+  const footL = useRef(0)
+  const footR = useRef(0)
+  const rollRef = useRef(0)
+  const headYaw = useRef(0)
+  const headPitch = useRef(0)
 
   useFrame((_, rawDelta) => {
     const dt = Math.min(rawDelta, 0.05)
@@ -230,13 +379,17 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
       const flutter = Math.sin(performance.now() * 0.006) * 0.09
       const deployed = playerState.y < CHUTE_ALTITUDE
       // Belly-to-earth in freefall, upright once the canopy takes the weight.
-      if (hips.current) hips.current.rotation.x = deployed ? -0.06 : -0.4
+      if (hips.current) hips.current.rotation.set(deployed ? -0.06 : -0.4, 0, 0)
       if (chest.current) chest.current.rotation.x = (deployed ? 0.04 : 0.24) + flutter * 0.3
       if (legL.current) legL.current.rotation.set(deployed ? 0.12 : 0.6 + flutter, 0, 0.16)
       if (legR.current) legR.current.rotation.set(deployed ? 0.12 : 0.6 - flutter, 0, -0.16)
+      if (kneeL.current) kneeL.current.rotation.x = deployed ? 0.3 : 0.85
+      if (kneeR.current) kneeR.current.rotation.x = deployed ? 0.3 : 0.85
       if (armL.current) armL.current.rotation.set(deployed ? -2.5 : -1.9, 0, (deployed ? 0.5 : 0.8) + flutter)
       if (armR.current) armR.current.rotation.set(deployed ? -2.5 : -1.9, 0, (deployed ? -0.5 : -0.8) - flutter)
-      if (head.current) head.current.rotation.x = deployed ? -0.05 : -0.35
+      if (elbowL.current) elbowL.current.rotation.x = -0.5
+      if (elbowR.current) elbowR.current.rotation.x = -0.5
+      if (head.current) head.current.rotation.set(deployed ? -0.05 : -0.35, 0, 0)
       if (root.current) root.current.position.y = 0
       if (chute.current) {
         chute.current.visible = deployed
@@ -252,28 +405,23 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
 
     if (chute.current) chute.current.visible = false
 
+    /* ── Legs ─────────────────────────────────────────────── */
     if (!grounded) {
-      // Airborne: tuck.
-      if (legL.current) legL.current.rotation.x = 0.5
-      if (legR.current) legR.current.rotation.x = -0.25
-      if (armL.current) armL.current.rotation.set(-0.9, 0, 0.28)
-      if (armR.current) armR.current.rotation.set(-0.9, 0, -0.28)
+      // Airborne: tuck, with the knees actually folded.
+      if (legL.current) legL.current.rotation.set(0.55, 0, 0)
+      if (legR.current) legR.current.rotation.set(-0.2, 0, 0)
+      if (kneeL.current) kneeL.current.rotation.x = 0.95
+      if (kneeR.current) kneeR.current.rotation.x = 0.45
       if (chest.current) chest.current.rotation.x = 0.1
-      if (hips.current) hips.current.rotation.x = 0
     } else {
-      if (legL.current) legL.current.rotation.x = Math.sin(t) * swing
-      if (legR.current) legR.current.rotation.x = -Math.sin(t) * swing
-      // Lowered arms swing with the gait; shouldered arms hold the weapon.
-      if (armL.current) {
-        armL.current.rotation.x = -Math.sin(t) * armSwing + aim * -1.36
-        armL.current.rotation.z = 0.09 + (gait ? 0.05 : 0) + aim * 0.42
-        armL.current.rotation.y = aim * 0.3
-      }
-      if (armR.current) {
-        armR.current.rotation.x = Math.sin(t) * armSwing + aim * -1.42
-        armR.current.rotation.z = -0.09 - (gait ? 0.05 : 0) - aim * 0.12
-        armR.current.rotation.y = aim * -0.16
-      }
+      const sw = Math.sin(t)
+      if (legL.current) legL.current.rotation.set(sw * swing, 0, 0)
+      if (legR.current) legR.current.rotation.set(-sw * swing, 0, 0)
+      // The knee folds on the swing phase — the half of the cycle where the
+      // leg travels forward and the foot has to clear the ground. A straight
+      // leg through that phase is exactly what reads as a stick.
+      if (kneeL.current) kneeL.current.rotation.x = Math.max(0, -sw) * swing * 1.15 + 0.06
+      if (kneeR.current) kneeR.current.rotation.x = Math.max(0, sw) * swing * 1.15 + 0.06
       if (chest.current) {
         // Lean into a sprint; square up to the target when aiming.
         chest.current.rotation.x = leanRef.current * (1 - aim * 0.6)
@@ -282,23 +430,91 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
       if (hips.current) hips.current.rotation.y = -Math.sin(t) * (gait ? 0.09 : 0) * (1 - aim * 0.7)
     }
 
+    /* ── Arms ─────────────────────────────────────────────── */
+    // Both arms interpolate between the lowered carry and the shouldered aim,
+    // then the gait swing is added on top of the shoulder pitch.
+    const mix = (a: readonly number[], b: readonly number[], i: number) => a[i] + (b[i] - a[i]) * aim
+    const swingOffset = Math.sin(t) * armSwing
+
+    if (armR.current) {
+      armR.current.rotation.set(
+        mix(POSE.rightLowered, POSE.rightAimed, 0) + swingOffset,
+        mix(POSE.rightLowered, POSE.rightAimed, 1),
+        mix(POSE.rightLowered, POSE.rightAimed, 2)
+      )
+    }
+    if (elbowR.current) elbowR.current.rotation.x = mix(POSE.rightLowered, POSE.rightAimed, 3)
+    if (armL.current) {
+      armL.current.rotation.set(
+        mix(POSE.leftLowered, POSE.leftAimed, 0) - swingOffset,
+        mix(POSE.leftLowered, POSE.leftAimed, 1),
+        mix(POSE.leftLowered, POSE.leftAimed, 2)
+      )
+    }
+    if (elbowL.current) elbowL.current.rotation.x = mix(POSE.leftLowered, POSE.leftAimed, 3)
+
+    /* ── Foot planting ──────────────────────────────────────
+       The island has 15° hills now, so a level stance leaves the uphill foot
+       buried and the downhill one hanging in the air. Each leg drops to the
+       ground under its own foot and the hips roll toward the low side.
+
+       Sampled from the height field rather than raycast: terrainHeight is the
+       same function the collider mesh is built from, so it is exact and costs
+       nothing. That also means it is only valid outdoors — indoors the player
+       stands on a slab the height field knows nothing about, so the correction
+       switches off, which is right anyway because floors are flat. */
+    let targetL = 0
+    let targetR = 0
+    let targetRoll = 0
+    const outdoors = grounded && !insideHouse(playerState.x, playerState.y, playerState.z)
+    if (outdoors) {
+      const yaw = playerState.heading
+      const c = Math.cos(yaw)
+      const s = Math.sin(yaw)
+      // Local (±HALF_STANCE, 0, 0) into world, matching the rotation
+      // convention used for the house marker offsets.
+      const soleY = playerState.y - FEET_OFFSET
+      const gR = terrainHeight(playerState.x + c * HALF_STANCE, playerState.z - s * HALF_STANCE)
+      const gL = terrainHeight(playerState.x - c * HALF_STANCE, playerState.z + s * HALF_STANCE)
+      // The capsule rests on the higher contact, so these are never positive
+      // by much; clamping keeps a cliff edge from stretching a leg to nothing.
+      targetL = Math.max(-MAX_FOOT_DROP, Math.min(0, gL - soleY))
+      targetR = Math.max(-MAX_FOOT_DROP, Math.min(0, gR - soleY))
+      targetRoll = Math.max(-0.16, Math.min(0.16, (targetR - targetL) * 0.45))
+    }
+    footL.current = damp(footL.current, targetL, dt, 12)
+    footR.current = damp(footR.current, targetR, dt, 12)
+    rollRef.current = damp(rollRef.current, targetRoll, dt, 9)
+    if (legL.current) legL.current.position.y = footL.current
+    if (legR.current) legR.current.position.y = footR.current
+    if (hips.current) hips.current.rotation.z = rollRef.current
+
+    /* ── Head tracking ──────────────────────────────────────
+       The head turns toward where the camera is looking rather than sweeping
+       on a fixed sine. Standing still and panning the camera now reads as the
+       character looking around, which is the cheapest "alive" cue there is. */
     if (head.current) {
-      head.current.rotation.x = (gait === 2 ? -0.12 : 0) + aim * 0.1
-      head.current.rotation.y = gait && !aim ? 0 : Math.sin(performance.now() * 0.0007) * 0.16 * (1 - aim)
+      const wantYaw = Math.max(
+        -MAX_HEAD_TURN,
+        Math.min(MAX_HEAD_TURN, shortestAngle(playerState.heading, cameraOrbit.yaw + Math.PI))
+      )
+      // Aiming locks the head down the sights; sprinting drops the gaze ahead.
+      headYaw.current = damp(headYaw.current, wantYaw * (1 - aim), dt, 6)
+      headPitch.current = damp(
+        headPitch.current,
+        (gait === 2 ? -0.12 : 0) + aim * 0.1 - cameraOrbit.pitch * 0.25 * (1 - aim),
+        dt,
+        6
+      )
+      head.current.rotation.y = headYaw.current
+      head.current.rotation.x = headPitch.current
     }
 
-    // The weapon rides between a lowered carry and the shoulder.
-    if (weapon.current) {
-      weapon.current.position.set(
-        0.16 - aim * 0.13,
-        0.02 + aim * 0.42,
-        0.16 + aim * 0.12
-      )
-      weapon.current.rotation.set(
-        0.42 - aim * 0.42,
-        -0.5 + aim * 0.5,
-        0.22 - aim * 0.22
-      )
+    // Breathing: a slow rise and fall of the chest, strongest at rest. Without
+    // it a stationary character is completely frozen between footsteps.
+    if (chest.current) {
+      const breath = Math.sin(performance.now() * 0.0011) * (gait ? 0.004 : 0.012)
+      chest.current.position.y = breath
     }
 
     // Backpack sway, a beat behind the torso — cheap secondary motion that
@@ -342,132 +558,155 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
         )}
       </group>
 
-      <group ref={hips} position={[0, 0.86, 0]}>
+      <group ref={hips} position={[0, HIP_Y, 0]}>
         {/* Belt and holster sit on the hips, so they don't swim with the torso */}
-        <mesh castShadow position={[0, 0.02, 0]} material={mats.strap}>
-          <boxGeometry args={[0.56, 0.09, 0.34]} />
+        <mesh castShadow position={[0, 0.03, 0]} material={mats.strap}>
+          <boxGeometry args={[0.48, 0.1, 0.3]} />
         </mesh>
-        <mesh position={[0, 0.02, 0.18]} material={mats.buckle}>
+        <mesh position={[0, 0.03, 0.16]} material={mats.buckle}>
           <boxGeometry args={[0.09, 0.07, 0.03]} />
         </mesh>
-        <mesh castShadow position={[0.29, -0.13, 0.03]} rotation={[0, 0, 0.1]} material={mats.pack}>
-          <boxGeometry args={[0.1, 0.22, 0.13]} />
+        <mesh castShadow position={[0.26, -0.13, 0.03]} rotation={[0, 0, 0.1]} material={mats.pack}>
+          <boxGeometry args={[0.09, 0.22, 0.13]} />
         </mesh>
-        <mesh castShadow position={[-0.28, -0.1, -0.02]} material={mats.pack}>
+        <mesh castShadow position={[-0.25, -0.1, -0.02]} material={mats.pack}>
           <boxGeometry args={[0.09, 0.16, 0.12]} />
         </mesh>
 
-        {/* Legs hang from the hips. */}
-        <group ref={legL}>
-          <Leg mats={mats} side={-1} />
+        {/* Legs hang from the hips. Each leg group is the hip joint; the knee
+            group inside it is the knee. */}
+        <group ref={legL} position={[-HALF_STANCE, 0, 0]}>
+          <Leg mats={mats} knee={kneeL} />
         </group>
-        <group ref={legR}>
-          <Leg mats={mats} side={1} />
+        <group ref={legR} position={[HALF_STANCE, 0, 0]}>
+          <Leg mats={mats} knee={kneeR} />
         </group>
 
         <group ref={chest}>
-          {/* Torso */}
-          <mesh castShadow position={[0, 0.26, 0]} material={mats.fatigue}>
-            <boxGeometry args={[0.52, 0.56, 0.3]} />
+          {/* Torso — narrower than the shoulder span, so the arms break the
+              outline instead of disappearing into it. */}
+          <mesh castShadow position={[0, 0.23, 0]} material={mats.fatigue}>
+            <boxGeometry args={[0.42, 0.46, 0.26]} />
           </mesh>
           {/* Plate carrier */}
-          <mesh castShadow position={[0, 0.28, 0.01]} material={mats.vest}>
-            <boxGeometry args={[0.56, 0.44, 0.36]} />
+          <mesh castShadow position={[0, 0.25, 0.01]} material={mats.vest}>
+            <boxGeometry args={[0.45, 0.38, 0.31]} />
           </mesh>
           {/* Shoulder straps running over the plate, with buckles */}
           {[-1, 1].map((s) => (
-            <mesh key={s} castShadow position={[s * 0.19, 0.46, 0.03]} material={mats.strap}>
-              <boxGeometry args={[0.11, 0.12, 0.4]} />
+            <mesh key={s} castShadow position={[s * 0.15, 0.42, 0.02]} material={mats.strap}>
+              <boxGeometry args={[0.1, 0.11, 0.34]} />
             </mesh>
           ))}
-          <mesh position={[0, 0.28, 0.19]} material={mats.strap}>
-            <boxGeometry args={[0.58, 0.07, 0.03]} />
+          <mesh position={[0, 0.25, 0.16]} material={mats.strap}>
+            <boxGeometry args={[0.47, 0.06, 0.03]} />
           </mesh>
-          {[-0.2, 0.2].map((x) => (
-            <mesh key={x} position={[x, 0.4, 0.2]} material={mats.buckle}>
+          {[-0.16, 0.16].map((x) => (
+            <mesh key={x} position={[x, 0.36, 0.17]} material={mats.buckle}>
               <boxGeometry args={[0.06, 0.05, 0.03]} />
             </mesh>
           ))}
           {/* Mag pouches */}
-          {[-0.14, 0.02, 0.18].map((x) => (
-            <mesh key={x} castShadow position={[x, 0.15, 0.2]} material={mats.pack}>
-              <boxGeometry args={[0.12, 0.16, 0.07]} />
+          {[-0.12, 0.02, 0.16].map((x) => (
+            <mesh key={x} castShadow position={[x, 0.14, 0.17]} material={mats.pack}>
+              <boxGeometry args={[0.11, 0.15, 0.07]} />
             </mesh>
           ))}
-          {/* Radio on the left shoulder, antenna included */}
-          <mesh castShadow position={[-0.3, 0.34, -0.04]} material={mats.polymer}>
-            <boxGeometry args={[0.07, 0.16, 0.09]} />
+          {/* Radio on the left shoulder */}
+          <mesh castShadow position={[-0.25, 0.31, -0.04]} material={mats.polymer}>
+            <boxGeometry args={[0.07, 0.15, 0.09]} />
           </mesh>
           {/* Shoulder patch */}
-          <mesh position={[-0.29, 0.44, 0.02]} material={mats.accent}>
-            <boxGeometry args={[0.03, 0.1, 0.12]} />
+          <mesh position={[-0.24, 0.4, 0.02]} material={mats.accent}>
+            <boxGeometry args={[0.03, 0.09, 0.11]} />
           </mesh>
+
           {/* Backpack — its own group so it can lag the torso. */}
-          <group ref={pack} position={[0, 0.24, -0.16]}>
+          <group ref={pack} position={[0, 0.22, -0.14]}>
             <mesh castShadow position={[0, 0, -0.1]} material={mats.pack}>
-              <boxGeometry args={[0.44, 0.5, 0.22]} />
+              <boxGeometry args={[0.4, 0.46, 0.2]} />
             </mesh>
-            <mesh castShadow position={[0, 0.08, -0.23]} material={mats.strap}>
-              <boxGeometry args={[0.3, 0.16, 0.06]} />
+            <mesh castShadow position={[0, 0.08, -0.21]} material={mats.strap}>
+              <boxGeometry args={[0.28, 0.15, 0.06]} />
             </mesh>
-            <mesh position={[0, -0.14, -0.22]} material={mats.strap}>
-              <boxGeometry args={[0.34, 0.08, 0.04]} />
+            <mesh position={[0, -0.13, -0.2]} material={mats.strap}>
+              <boxGeometry args={[0.32, 0.07, 0.04]} />
             </mesh>
             {/* Bedroll lashed across the top */}
-            <mesh castShadow position={[0, 0.24, -0.14]} rotation={[0, 0, Math.PI / 2]} material={mats.fatigueDark}>
-              <cylinderGeometry args={[0.07, 0.07, 0.42, 7]} />
+            <mesh castShadow position={[0, 0.22, -0.13]} rotation={[0, 0, Math.PI / 2]} material={mats.fatigueDark}>
+              <cylinderGeometry args={[0.065, 0.065, 0.38, 7]} />
             </mesh>
           </group>
 
-          <group ref={armL} position={[0, 0.44, 0]}>
-            <Arm mats={mats} side={-1} />
+          {/* Arms. Shoulders sit outboard of the vest (0.33 against a 0.225
+              half-width) so the limbs are visible from every angle. */}
+          <group ref={armL} position={[-SHOULDER_X, SHOULDER_Y, 0]}>
+            <Arm mats={mats} side={-1} elbow={elbowL} hand={handL} />
           </group>
-          <group ref={armR} position={[0, 0.44, 0]}>
-            <Arm mats={mats} side={1} />
+          <group ref={armR} position={[SHOULDER_X, SHOULDER_Y, 0]}>
+            <Arm mats={mats} side={1} elbow={elbowR} hand={handR}>
+              {/* The weapon lives in the hand, so it tracks the arm through
+                  every pose rather than floating beside the chest. */}
+              <group position={WEAPON_IN_HAND.position} rotation={WEAPON_IN_HAND.rotation}>
+                <Rifle mats={mats} />
+              </group>
+            </Arm>
           </group>
 
-          {/* Weapon. Parented to the chest so it tracks the torso, and moved
-              between carry and shoulder in the frame loop. */}
-          <group ref={weapon} position={[0.16, 0.02, 0.16]}>
-            <Rifle mats={mats} />
-          </group>
+          {/* Neck, then the head */}
+          <mesh position={[0, NECK_Y, -0.01]} material={mats.skinDark}>
+            <boxGeometry args={[0.13, 0.1, 0.13]} />
+          </mesh>
 
-          {/* Head */}
-          <group ref={head} position={[0, 0.62, 0]}>
-            <mesh castShadow position={[0, 0.11, 0]} material={mats.skin}>
-              <boxGeometry args={[0.26, 0.28, 0.26]} />
+          <group ref={head} position={[0, HEAD_Y, 0]}>
+            <mesh castShadow position={[0, 0.13, 0]} material={mats.skin}>
+              <boxGeometry args={[0.22, 0.26, 0.23]} />
             </mesh>
-            {/* Collar, so the head doesn't float on the torso */}
-            <mesh position={[0, -0.02, 0]} material={mats.fatigueDark}>
-              <boxGeometry args={[0.3, 0.1, 0.28]} />
+            {/* Face. Small, but the difference between a person and a post. */}
+            {[-1, 1].map((s) => (
+              <mesh key={s} position={[s * 0.055, 0.15, 0.117]} material={mats.eye}>
+                <boxGeometry args={[0.045, 0.032, 0.01]} />
+              </mesh>
+            ))}
+            <mesh position={[0, 0.115, 0.125]} material={mats.skinDark}>
+              <boxGeometry args={[0.04, 0.05, 0.03]} />
             </mesh>
-            {/* Helmet */}
-            <mesh castShadow position={[0, 0.2, -0.01]} material={mats.helmet}>
-              <boxGeometry args={[0.32, 0.2, 0.33]} />
+            <mesh position={[0, 0.06, 0.117]} material={mats.skinDark}>
+              <boxGeometry args={[0.075, 0.018, 0.01]} />
             </mesh>
-            <mesh position={[0, 0.13, 0.15]} material={mats.helmet}>
-              <boxGeometry args={[0.3, 0.05, 0.09]} />
+            {/* Stubble along the jaw */}
+            <mesh position={[0, 0.035, 0.03]} material={mats.skinDark}>
+              <boxGeometry args={[0.215, 0.05, 0.215]} />
+            </mesh>
+            {/* Helmet, sitting above the brow rather than over the eyes */}
+            <mesh castShadow position={[0, 0.29, -0.01]} material={mats.helmet}>
+              <boxGeometry args={[0.27, 0.16, 0.28]} />
+            </mesh>
+            <mesh position={[0, 0.235, 0.1]} material={mats.helmet}>
+              <boxGeometry args={[0.26, 0.05, 0.11]} />
             </mesh>
             {/* Chin strap */}
-            <mesh position={[0, 0.06, 0.01]} material={mats.strap}>
-              <boxGeometry args={[0.34, 0.04, 0.3]} />
+            {[-1, 1].map((s) => (
+              <mesh key={s} position={[s * 0.115, 0.14, 0.01]} material={mats.strap}>
+                <boxGeometry args={[0.025, 0.2, 0.03]} />
+              </mesh>
+            ))}
+            {/* Goggles pushed up onto the helmet — they used to cover the face */}
+            <mesh position={[0, 0.3, 0.09]} material={mats.glass}>
+              <boxGeometry args={[0.28, 0.07, 0.14]} />
             </mesh>
             {/* Helmet rail + counterweight pouch */}
             {[-1, 1].map((s) => (
-              <mesh key={s} position={[s * 0.165, 0.21, 0]} material={mats.polymer}>
-                <boxGeometry args={[0.02, 0.05, 0.26]} />
+              <mesh key={s} position={[s * 0.14, 0.29, 0]} material={mats.polymer}>
+                <boxGeometry args={[0.02, 0.05, 0.24]} />
               </mesh>
             ))}
-            <mesh castShadow position={[0, 0.19, -0.19]} material={mats.pack}>
-              <boxGeometry args={[0.2, 0.13, 0.07]} />
-            </mesh>
-            {/* Goggles */}
-            <mesh position={[0, 0.24, 0.06]} material={mats.glass}>
-              <boxGeometry args={[0.33, 0.08, 0.28]} />
+            <mesh castShadow position={[0, 0.28, -0.17]} material={mats.pack}>
+              <boxGeometry args={[0.18, 0.12, 0.07]} />
             </mesh>
             {/* Antenna */}
-            <mesh position={[0.13, 0.36, -0.12]} rotation={[0.18, 0, 0.12]}>
-              <cylinderGeometry args={[0.008, 0.012, 0.34, 4]} />
+            <mesh position={[0.11, 0.45, -0.11]} rotation={[0.18, 0, 0.12]}>
+              <cylinderGeometry args={[0.008, 0.012, 0.32, 4]} />
               <meshStandardMaterial color="#20241c" />
             </mesh>
           </group>

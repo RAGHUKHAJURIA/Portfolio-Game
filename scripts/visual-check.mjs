@@ -164,6 +164,41 @@ await shot('04-look')
 await page.keyboard.down('KeyW')
 await wait(1600)
 await shot('05-walking')
+
+// On a hill flank, where foot planting actually has something to do: a level
+// stance here buries the uphill boot and hangs the downhill one in the air.
+// (-81, -49) is the largest hill; this sits on its side, not its crown.
+await page.evaluate(() => window.__tp && window.__tp(-70, 20, -40))
+await wait(2400)
+// Zoom in and pitch down, or the boots — the whole point of the shot — are a
+// dozen pixels tall at the default boom length.
+await page.mouse.move(cx, cy)
+// Moderate zoom only: the minimum boom crops the figure, and a downward drag
+// pins the camera overhead where the whole character reads as a helmet.
+await page.mouse.wheel(0, -300)
+await page.mouse.down()
+await page.mouse.move(cx + 240, cy - 40, { steps: 10 })
+await page.mouse.up()
+await wait(1600)
+await shot('05b-slope')
+
+// The grip and the face need open ground and a view from the front, so this
+// one happens on the landing plaza with the camera orbited most of the way
+// round — in the trees on a hillside you photograph a backpack.
+await page.evaluate(() => window.__tp && window.__tp(0, 8, 9))
+await wait(2400)
+await page.mouse.down()
+await page.mouse.move(cx + 700, cy - 30, { steps: 16 })
+await page.mouse.up()
+await wait(1400)
+await shot('05d-front')
+
+await page.mouse.down({ button: 'right' })
+await wait(1600)
+await shot('05c-aiming')
+await page.mouse.up({ button: 'right' })
+await wait(600)
+
 if (quick) {
   await page.keyboard.up('KeyW')
   await browser.close()
