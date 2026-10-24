@@ -2,13 +2,13 @@ import { memo, useMemo } from 'react'
 import { TerrainChunk } from '../components/experience/Terrain'
 import { ChunkDebris, ChunkPropColliders, CentralProps, LandmarkProps } from '../components/experience/Props'
 import { StreamedProps } from './StreamedProps'
+import { perfFlag } from '../lib/perfFlags'
 import { AboutHouse } from '../components/experience/houses/AboutHouse'
 import { ProjectsHouse } from '../components/experience/houses/ProjectsHouse'
 import { SkillsHouse } from '../components/experience/houses/SkillsHouse'
 import { ExperienceHouse } from '../components/experience/houses/ExperienceHouse'
 import { ContactHouse } from '../components/experience/houses/ContactHouse'
 import { ShootingRange } from '../components/experience/range/ShootingRange'
-import { RANGE_ORIGIN } from '../lib/terrain'
 import { contentFor } from './manifest'
 import { chunkOf, type ChunkCoord, type Detail } from './config'
 
@@ -55,15 +55,25 @@ export const DetailChunk = memo(function DetailChunk({ coord, detail }: { coord:
     {detail === 'high' && <>
       <ChunkPropColliders content={content} />
       <ChunkDebris content={content} />
-      {content.houses.includes('about') && <AboutHouse />}
-      {content.houses.includes('projects') && <ProjectsHouse />}
-      {content.houses.includes('skills') && <SkillsHouse />}
-      {content.houses.includes('experience') && <ExperienceHouse />}
-      {content.houses.includes('contact') && <ContactHouse />}
       {here(0, 2) && <CentralProps />}
       {here(-104, -84) && <LandmarkProps kind="tower" />}
       {here(96, 96) && <LandmarkProps kind="cargo" />}
-      {here(RANGE_ORIGIN[0], RANGE_ORIGIN[1]) && <ShootingRange />}
     </>}
   </>
 })
+
+/** Interiors are prepared by distance to the actual building, not cell LOD. */
+export function HouseDetails({ active, furnished }: { active: Set<string>; furnished: Set<string> }) {
+  if (perfFlag('buildings')) return null
+  return <>
+    {active.has('about') && <AboutHouse furnished={furnished.has('about')} />}
+    {active.has('projects') && <ProjectsHouse furnished={furnished.has('projects')} />}
+    {active.has('skills') && <SkillsHouse furnished={furnished.has('skills')} />}
+    {active.has('experience') && <ExperienceHouse furnished={furnished.has('experience')} />}
+    {active.has('contact') && <ContactHouse furnished={furnished.has('contact')} />}
+  </>
+}
+
+export function RangeDetails() {
+  return perfFlag('range') ? null : <ShootingRange />
+}

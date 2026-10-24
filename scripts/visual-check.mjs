@@ -96,6 +96,27 @@ await shot('03-landed')
 await page.locator('button[title="Open ABOUT"]').waitFor({ state: 'visible', timeout: 90000 })
 console.log('Landed, HUD is up.')
 
+const assertUpright = async (label) => {
+  const pose = await page.evaluate(() => {
+    const state = window.__r3f?.getState?.() ?? window.__r3f
+    return ['CharacterYawRoot', 'CharacterVisualRoot', 'CharacterPelvis'].map((name) => {
+      const group = state?.scene?.getObjectByName?.(name)
+      if (!group) return { name, missing: true }
+      group.updateWorldMatrix(true, false)
+      const e = group.matrixWorld.elements
+      return { name, pitch: group.rotation.x, roll: group.rotation.z,
+        worldUpX: e[4], worldUpZ: e[6] }
+    })
+  })
+  for (const group of pose) {
+    if (group.missing || Math.abs(group.pitch) > 0.001 || Math.abs(group.roll) > 0.001 ||
+      Math.abs(group.worldUpX) > 0.001 || Math.abs(group.worldUpZ) > 0.001)
+      errors.push(`${label}: ${group.name} tilted: ${JSON.stringify(group)}`)
+  }
+  console.log(`${label} upright: ${pose.every((g) => !g.missing && Math.abs(g.roll) <= 0.001)}`)
+}
+await assertUpright('landed')
+
 const box = await (await page.$('canvas')).boundingBox()
 const cx = box.x + box.width / 2
 const cy = box.y + box.height / 2
@@ -164,6 +185,7 @@ await shot('04-look')
 await page.keyboard.down('KeyW')
 await wait(1600)
 await shot('05-walking')
+await assertUpright('walking')
 
 // On a hill flank, where foot planting actually has something to do: a level
 // stance here buries the uphill boot and hangs the downhill one in the air.
@@ -181,6 +203,7 @@ await page.mouse.move(cx + 240, cy - 40, { steps: 10 })
 await page.mouse.up()
 await wait(1600)
 await shot('05b-slope')
+await assertUpright('slope')
 
 // The grip and the face need open ground and a view from the front, so this
 // one happens on the landing plaza with the camera orbited most of the way
@@ -208,6 +231,7 @@ if (quick) {
 await page.keyboard.down('ShiftLeft')
 await wait(1600)
 await shot('06-sprinting')
+await assertUpright('sprinting')
 await page.keyboard.up('ShiftLeft')
 await page.keyboard.up('KeyW')
 
@@ -261,18 +285,37 @@ await page.evaluate(([x, z]) => window.__tp && window.__tp(x, 7.4, z), [CORK_X, 
 await wait(1600)
 const promptDownstairs = await page.getByTestId('interact-prompt').isVisible().catch(() => false)
 await shot('16-interior-ground')
+await assertUpright('inside building')
 
-// Upper floor, same spot: now it must.
-await page.evaluate(([x, z]) => window.__tp && window.__tp(x, 10.6, z), [CORK_X, CORK_Z])
+// Upper floor, same spot: put the capsule centre just above the 8.28m slab.
+// The old 10.6m teleport floated 1.5m above it and could cross the trigger's
+// vertical boundary while a slow SwiftShader screenshot was being captured.
+await page.evaluate(([x, z]) => window.__tp && window.__tp(x, 9.3, z), [CORK_X, CORK_Z])
 await wait(1600)
 const promptUpstairs = await page.getByTestId('interact-prompt').isVisible().catch(() => false)
 await shot('17-interior-upper')
+await assertUpright('upstairs')
 
 console.log(`Interior prompt — ground floor: ${promptDownstairs}, upper floor: ${promptUpstairs}`)
 if (promptDownstairs) errors.push('content prompt fires from the ground floor — the height check is not working')
 if (!promptUpstairs) errors.push('content prompt does not fire on the upper floor next to the object')
 
 if (promptUpstairs) {
+  const stablePrompt = await page.getByTestId('interact-prompt').isVisible().catch(() => false)
+  const upperPosition = await page.evaluate(() => {
+    const state = window.__r3f?.getState?.() ?? window.__r3f
+    const player = state?.scene?.getObjectByName('CharacterYawRoot')
+    player?.updateWorldMatrix(true, false)
+    const e = player?.matrixWorld.elements
+    return e ? [e[12], e[13], e[14]].map((n) => +n.toFixed(2)) : null
+  })
+  console.log(`Prompt immediately before E: ${stablePrompt}; feet: ${upperPosition}`)
+  // Screenshot capture can take several seconds in software WebGL. Re-enter
+  // the trigger before interacting if the character moved during capture.
+  if (!stablePrompt) {
+    await page.evaluate(([x, z]) => window.__tp?.(x, 9.3, z), [CORK_X, CORK_Z])
+    await page.getByTestId('interact-prompt').waitFor({ state: 'visible', timeout: 30000 })
+  }
   await page.keyboard.press('KeyE')
   await page.getByRole('dialog').waitFor({ state: 'visible', timeout: 30000 })
   await wait(700)
@@ -290,6 +333,7 @@ if (promptUpstairs) {
 await page.evaluate(() => window.__tp && window.__tp(92, 10, 23))
 await wait(2000)
 await shot('19-range')
+await assertUpright('range')
 
 const beforeShots = await page.evaluate(() => document.body.innerText.includes('RANGE'))
 void beforeShots

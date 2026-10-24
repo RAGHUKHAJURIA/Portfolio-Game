@@ -13,7 +13,7 @@ const EAVE = UPPER_Y + UPPER_H + 0.25
  * the building underneath became a blockhouse. The loadout board upstairs is
  * what opens the panel; there's one rack post per loadout slot outside.
  */
-export function SkillsHouse() {
+export function SkillsHouse({ furnished = true }: { furnished?: boolean }) {
   const m = useBuildMats()
 
   return (
@@ -23,7 +23,7 @@ export function SkillsHouse() {
         <boxGeometry args={[15, 3, 15]} />
       </mesh>
 
-      <HouseInterior mats={m} lampColor="#ffb08a">
+      <HouseInterior mats={m} lampColor="#ffb08a" furnished={furnished}>
         {/* ── Content object: the loadout board, one row per slot. ── */}
         <group position={[2.2, UPPER_Y, -IN_Z + 0.35]}>
           <mesh castShadow receiveShadow position={[0, 1.5, 0.06]} material={m.metalDark}>

@@ -1,6 +1,8 @@
 import { Bloom, EffectComposer, N8AO, SMAA, ToneMapping } from '@react-three/postprocessing'
 import { ToneMappingMode } from 'postprocessing'
 import { useGameStore } from '../../store/useGameStore'
+import { perfFlag } from '../../lib/perfFlags'
+import { QUALITY } from '../../lib/quality'
 
 /**
  * Post-processing stack.
@@ -25,6 +27,11 @@ import { useGameStore } from '../../store/useGameStore'
  */
 export function PostFx() {
   const isMobile = useGameStore((s) => s.isMobile)
+  const quality = useGameStore((s) => s.quality)
+  const preset = QUALITY[quality]
+  // On LOW the renderer's own ACES pass handles tone mapping; a fullscreen
+  // composer would add a render target and resolve for no visible effect.
+  if (quality === 'low' || perfFlag('postfx')) return null
 
   // MSAA and N8AO cannot coexist: resolving a multisampled buffer blits the
   // depth attachment into the same image the AO pass is sampling, and WebGL
@@ -33,7 +40,7 @@ export function PostFx() {
   // AO anyway — keep plain MSAA, which is the cheaper AA there.
   return (
     <EffectComposer multisampling={isMobile ? 4 : 0} enableNormalPass={false}>
-      {isMobile ? (
+      {!preset.ao || perfFlag('ao') ? (
         <></>
       ) : (
         <N8AO
@@ -46,16 +53,16 @@ export function PostFx() {
           quality="low"
         />
       )}
-      <Bloom
+      {!preset.bloom || perfFlag('bloom') ? <></> : <Bloom
         mipmapBlur
         // The beacons and the sun are the only things meant to bloom; the
         // bright grass sits just under this threshold.
         luminanceThreshold={0.82}
         luminanceSmoothing={0.28}
         intensity={0.55}
-      />
+      />}
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-      {isMobile ? <></> : <SMAA />}
+      {isMobile || !preset.smaa || perfFlag('smaa') ? <></> : <SMAA />}
     </EffectComposer>
   )
 }

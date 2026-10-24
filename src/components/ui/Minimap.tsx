@@ -3,15 +3,14 @@ import { ISLAND, houses } from '../../data/portfolioData'
 import { INLETS, PATH_SEGMENTS } from '../../lib/terrain'
 import { playerState } from '../../state/controls'
 import { useGameStore } from '../../store/useGameStore'
+import { perfFlag } from '../../lib/perfFlags'
 
 const WORLD_R = ISLAND.boundary + 4
 const DPR = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
 
-/**
- * Canvas minimap. Redraws on rAF straight from `playerState`, so it stays in
- * sync with the character without pushing a single React render.
- */
+/** Static geography is drawn once; live markers update at 20 Hz without React. */
 export function Minimap({ size: SIZE = 150 }: { size?: number }) {
+  if (perfFlag('minimap')) return null
   const canvas = useRef<HTMLCanvasElement>(null)
   const visited = useGameStore((s) => s.visited)
   const visitedRef = useRef(visited)
@@ -44,55 +43,68 @@ export function Minimap({ size: SIZE = 150 }: { size?: number }) {
     const toX = (x: number) => c + x * k
     const toY = (z: number) => c + z * k
 
-    let raf = 0
-    const draw = () => {
-      raf = requestAnimationFrame(draw)
-      ctx.clearRect(0, 0, SIZE, SIZE)
+    const background = document.createElement('canvas')
+    background.width = cv.width
+    background.height = cv.height
+    const bg = background.getContext('2d')
+    if (!bg) return
+    bg.scale(DPR, DPR)
+
+    const drawBackground = () => {
 
       // Water
-      ctx.fillStyle = '#16323d'
-      ctx.fillRect(0, 0, SIZE, SIZE)
+      bg.fillStyle = '#16323d'
+      bg.fillRect(0, 0, SIZE, SIZE)
 
       // Island landmass
-      ctx.beginPath()
-      ctx.arc(c, c, ISLAND.radius * k, 0, Math.PI * 2)
-      ctx.fillStyle = '#4c5a33'
-      ctx.fill()
+      bg.beginPath()
+      bg.arc(c, c, ISLAND.radius * k, 0, Math.PI * 2)
+      bg.fillStyle = '#4c5a33'
+      bg.fill()
 
-      ctx.beginPath()
-      ctx.arc(c, c, (ISLAND.radius - 5) * k, 0, Math.PI * 2)
-      ctx.fillStyle = '#576636'
-      ctx.fill()
+      bg.beginPath()
+      bg.arc(c, c, (ISLAND.radius - 5) * k, 0, Math.PI * 2)
+      bg.fillStyle = '#576636'
+      bg.fill()
 
       // Water inlets, before the roads so a road never appears to cross one.
-      ctx.fillStyle = '#16323d'
+      bg.fillStyle = '#16323d'
       for (const m of INLETS) {
-        ctx.beginPath()
+        bg.beginPath()
         // The visible water reaches roughly where the mound clears sea level,
         // which is well inside its full falloff radius.
-        ctx.arc(toX(m.x), toY(m.z), m.r * 0.72 * k, 0, Math.PI * 2)
-        ctx.fill()
+        bg.arc(toX(m.x), toY(m.z), m.r * 0.72 * k, 0, Math.PI * 2)
+        bg.fill()
       }
 
       // The road network, straight from the terrain so the two never disagree.
-      ctx.strokeStyle = 'rgba(150,124,84,0.7)'
-      ctx.lineWidth = 2.5
-      ctx.lineCap = 'round'
+      bg.strokeStyle = 'rgba(150,124,84,0.7)'
+      bg.lineWidth = 2.5
+      bg.lineCap = 'round'
       for (const [ax, az, bx, bz] of PATH_SEGMENTS) {
-        ctx.beginPath()
-        ctx.moveTo(toX(ax), toY(az))
-        ctx.lineTo(toX(bx), toY(bz))
-        ctx.stroke()
+        bg.beginPath()
+        bg.moveTo(toX(ax), toY(az))
+        bg.lineTo(toX(bx), toY(bz))
+        bg.stroke()
       }
 
       // Boundary
-      ctx.beginPath()
-      ctx.arc(c, c, ISLAND.boundary * k, 0, Math.PI * 2)
-      ctx.strokeStyle = 'rgba(255,255,255,0.28)'
-      ctx.lineWidth = 1
-      ctx.setLineDash([3, 3])
-      ctx.stroke()
-      ctx.setLineDash([])
+      bg.beginPath()
+      bg.arc(c, c, ISLAND.boundary * k, 0, Math.PI * 2)
+      bg.strokeStyle = 'rgba(255,255,255,0.28)'
+      bg.lineWidth = 1
+      bg.setLineDash([3, 3])
+      bg.stroke()
+      bg.setLineDash([])
+    }
+    drawBackground()
+    const grad = ctx.createLinearGradient(0, 0, 0, -26)
+    grad.addColorStop(0, 'rgba(240,169,46,0.45)')
+    grad.addColorStop(1, 'rgba(240,169,46,0)')
+
+    const draw = () => {
+      ctx.clearRect(0, 0, SIZE, SIZE)
+      ctx.drawImage(background, 0, 0, SIZE, SIZE)
 
       // Buildings
       for (const h of houses) {
@@ -153,9 +165,6 @@ export function Minimap({ size: SIZE = 150 }: { size?: number }) {
       ctx.save()
       ctx.translate(px, py)
       ctx.rotate(-playerState.heading + Math.PI)
-      const grad = ctx.createLinearGradient(0, 0, 0, -26)
-      grad.addColorStop(0, 'rgba(240,169,46,0.45)')
-      grad.addColorStop(1, 'rgba(240,169,46,0)')
       ctx.beginPath()
       ctx.moveTo(0, 0)
       ctx.arc(0, 0, 26, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5)
@@ -179,7 +188,8 @@ export function Minimap({ size: SIZE = 150 }: { size?: number }) {
     }
 
     draw()
-    return () => cancelAnimationFrame(raf)
+    const timer = window.setInterval(draw, 50)
+    return () => clearInterval(timer)
   }, [SIZE])
 
   return (

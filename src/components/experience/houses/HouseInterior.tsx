@@ -137,10 +137,12 @@ export function HouseInterior({
   lampColor = '#ffcf9a',
   /** Rendered on the upper floor — the content object plus any dressing. */
   children,
+  furnished = true,
 }: {
   mats: BuildMats
   lampColor?: string
   children?: ReactNode
+  furnished?: boolean
 }) {
   const wallY = FLOOR_H / 2
   const upperWallY = UPPER_Y + UPPER_H / 2
@@ -253,10 +255,10 @@ export function HouseInterior({
 
       {/* ── Lighting. One lamp per storey plus a low fill, all short-range so
              they never leak out of the doorway onto the terrain. ── */}
-      <pointLight position={[0, FLOOR_H - 0.45, -0.6]} intensity={9} distance={11} decay={1.7} color={lampColor} />
-      <pointLight position={[1.2, UPPER_Y + UPPER_H - 0.5, -0.4]} intensity={8} distance={10} decay={1.7} color={lampColor} />
+      {furnished && <pointLight position={[0, FLOOR_H - 0.45, -0.6]} intensity={9} distance={11} decay={1.7} color={lampColor} />}
+      {furnished && <pointLight position={[1.2, UPPER_Y + UPPER_H - 0.5, -0.4]} intensity={8} distance={10} decay={1.7} color={lampColor} />}
       {/* Cool bounce from the doorway, so the entrance reads from inside. */}
-      <pointLight position={[0, 1.6, IN_Z - 0.6]} intensity={3.5} distance={7} decay={1.8} color="#bcd3e2" />
+      {furnished && <pointLight position={[0, 1.6, IN_Z - 0.6]} intensity={3.5} distance={7} decay={1.8} color="#bcd3e2" />}
 
       {/* Lamp housings */}
       {[
@@ -268,7 +270,7 @@ export function HouseInterior({
         </mesh>
       ))}
 
-      {children}
+      {furnished && children}
     </group>
   )
 }

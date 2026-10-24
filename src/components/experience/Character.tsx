@@ -367,7 +367,7 @@ export function Character() {
       enabledRotations={[false, false, false]}
     >
       <CapsuleCollider args={[CAPSULE_HALF, CAPSULE_RADIUS]} />
-      <group ref={visual} position={[0, -FEET_OFFSET, 0]}>
+      <group ref={visual} name="CharacterYawRoot" position={[0, -FEET_OFFSET, 0]}>
         <CharacterModel dropping={phase === 'dropping'} />
       </group>
     </RigidBody>

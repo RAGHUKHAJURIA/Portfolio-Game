@@ -26,15 +26,38 @@ const _right = new Vector3()
 
 const rawWorld = (w: unknown): any => (w as any)?.raw?.() ?? (w as any)?.current ?? w
 
+const CANOPY_CELL = 16
+const CANOPY_OFFSET = 16
+const CANOPY_GRID = 32
+type CanopyIndex = { cells: Canopy[][]; maxRadius: number }
+function indexCanopies(canopies: Canopy[]): CanopyIndex {
+  const cells: Canopy[][] = Array.from({ length: CANOPY_GRID * CANOPY_GRID }, () => [])
+  let maxRadius = 0
+  for (const canopy of canopies) {
+    const x = Math.floor(canopy.x / CANOPY_CELL) + CANOPY_OFFSET
+    const z = Math.floor(canopy.z / CANOPY_CELL) + CANOPY_OFFSET
+    if (x >= 0 && x < CANOPY_GRID && z >= 0 && z < CANOPY_GRID)
+      cells[z * CANOPY_GRID + x].push(canopy)
+    maxRadius = Math.max(maxRadius, canopy.r)
+  }
+  return { cells, maxRadius }
+}
+
 /**
  * Ray/sphere test against the tree canopies. Returns the nearest hit distance
  * along `dir` within `maxT`, or null. Only canopies near the ray's origin are
- * considered, so this stays a handful of arithmetic ops per frame rather than
- * a sweep over all ~90 trees.
+ * considered, so this scales with nearby trees rather than all 760 on the island.
  */
-function canopyHit(ox: number, oy: number, oz: number, dir: Vector3, maxT: number, canopies: Canopy[]): number | null {
+function canopyHit(ox: number, oy: number, oz: number, dir: Vector3, maxT: number, index: CanopyIndex): number | null {
+  if (index.cells.length === 0) return null
   let best: number | null = null
-  for (const c of canopies) {
+  const radius = maxT + index.maxRadius
+  const minX = Math.max(0, Math.floor((ox - radius) / CANOPY_CELL) + CANOPY_OFFSET)
+  const maxX = Math.min(CANOPY_GRID - 1, Math.floor((ox + radius) / CANOPY_CELL) + CANOPY_OFFSET)
+  const minZ = Math.max(0, Math.floor((oz - radius) / CANOPY_CELL) + CANOPY_OFFSET)
+  const maxZ = Math.min(CANOPY_GRID - 1, Math.floor((oz + radius) / CANOPY_CELL) + CANOPY_OFFSET)
+  for (let z = minZ; z <= maxZ; z++) for (let x = minX; x <= maxX; x++) {
+    for (const c of index.cells[z * CANOPY_GRID + x]) {
     const dx = c.x - ox
     const dz = c.z - oz
     // Cheap XZ reject before touching the full 3D maths.
@@ -52,6 +75,7 @@ function canopyHit(ox: number, oy: number, oz: number, dir: Vector3, maxT: numbe
     const t = tca - thc
     if (t > 0 && t < maxT && (best === null || t < best)) best = t
   }
+  }
   return best
 }
 
@@ -68,13 +92,14 @@ export function CameraRig() {
   const boom = useRef(cameraOrbit.distance)
   const initialised = useRef(false)
   const phase = useGameStore((s) => s.phase)
-  const canopies = useRef<Canopy[]>([])
+  const canopies = useRef<CanopyIndex>({ cells: [], maxRadius: 0 })
+  const rayRef = useRef<import('@dimforge/rapier3d-compat').Ray | null>(null)
 
   useEffect(() => {
     if (phase === 'loading' || phase === 'ready') return
     let cancelled = false
     import('../../lib/scatter').then((m) => {
-      if (!cancelled) canopies.current = m.CANOPIES
+      if (!cancelled) canopies.current = indexCanopies(m.CANOPIES)
     }).catch((error) => console.error('Canopy data failed to load', error))
     return () => { cancelled = true }
   }, [phase])
@@ -129,10 +154,15 @@ export function CameraRig() {
       const w = rawWorld(world)
       if (w?.castRay && rapier?.Ray) {
         try {
-          const ray = new rapier.Ray(
-            { x: _target.x + _right.x * shoulder, y: _target.y, z: _target.z + _right.z * shoulder },
-            { x: _dir.x, y: _dir.y, z: _dir.z }
-          )
+          const ray = rayRef.current ?? (rayRef.current = new rapier.Ray(
+            { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }
+          ))
+          ray.origin.x = _target.x + _right.x * shoulder
+          ray.origin.y = _target.y
+          ray.origin.z = _target.z + _right.z * shoulder
+          ray.dir.x = _dir.x
+          ray.dir.y = _dir.y
+          ray.dir.z = _dir.z
           const hit = w.castRay(ray, dist, true)
           if (hit) {
             const toi = (hit as any).timeOfImpact ?? (hit as any).toi

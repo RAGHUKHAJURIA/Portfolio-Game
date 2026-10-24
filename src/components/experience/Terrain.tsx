@@ -13,6 +13,7 @@ function TerrainMesh({ coord, proxy }: { coord: ChunkCoord; proxy: boolean }) {
   const cx = (coord.x + 0.5) * CHUNK_SIZE
   const cz = (coord.z + 0.5) * CHUNK_SIZE
   const geometry = useMemo(() => {
+    const start = performance.now()
     const geo = new PlaneGeometry(size, size, segments, segments)
     geo.rotateX(-Math.PI / 2)
     const pos = geo.attributes.position as BufferAttribute
@@ -32,8 +33,11 @@ function TerrainMesh({ coord, proxy }: { coord: ChunkCoord; proxy: boolean }) {
     }
     geo.setAttribute('color', new BufferAttribute(colors, 3))
     geo.computeVertexNormals()
+    if (new URLSearchParams(location.search).has('debug'))
+      performance.measure(`dropzone:terrain:${coord.x},${coord.z}:${segments}`,
+        { start, end: performance.now() })
     return geo
-  }, [size, segments, cx, cz])
+  }, [size, segments, cx, cz, coord.x, coord.z])
   useEffect(() => () => geometry.dispose(), [geometry])
   const detail = useMemo(() => proxy ? null : tiled('normal', 52 / 6), [proxy])
   useEffect(() => () => detail?.dispose(), [detail])

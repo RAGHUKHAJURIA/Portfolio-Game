@@ -14,7 +14,7 @@ const EAVE = UPPER_Y + UPPER_H + 0.25
  * rotating dish and a blinking aircraft-warning beacon. One whip antenna per
  * contact channel; the radio desk upstairs is what opens the panel.
  */
-export function ContactHouse() {
+export function ContactHouse({ furnished = true }: { furnished?: boolean }) {
   const m = useBuildMats()
   const dish = useRef<Group>(null)
   const beacon = useRef<Mesh>(null)
@@ -70,7 +70,7 @@ export function ContactHouse() {
         <boxGeometry args={[15, 3, 15]} />
       </mesh>
 
-      <HouseInterior mats={m} lampColor="#9fd0ff">
+      <HouseInterior mats={m} lampColor="#9fd0ff" furnished={furnished}>
         {/* ── Content object: the radio desk. ── */}
         <group position={[2.2, UPPER_Y, -IN_Z + 0.35]}>
           {/* Equipment rack against the wall */}

@@ -1,0 +1,275 @@
+{
+  "boot": {
+    "readyAtMs": 5643,
+    "scripts": [
+      {
+        "name": "index-CQhD_jOV.js",
+        "transfer": 349855,
+        "duration": 139
+      },
+      {
+        "name": "rolldown-runtime-CNC7AqOf.js",
+        "transfer": 1179,
+        "duration": 14
+      },
+      {
+        "name": "three-Bxa-dGfc.js",
+        "transfer": 170350,
+        "duration": 91
+      },
+      {
+        "name": "rapier-BLJcvlGt.js",
+        "transfer": 761609,
+        "duration": 228
+      },
+      {
+        "name": "DetailChunk-leiElIm1.js",
+        "transfer": 12970,
+        "duration": 21
+      },
+      {
+        "name": "scatter-DumyIEdj.js",
+        "transfer": 1522,
+        "duration": 19
+      }
+    ],
+    "longTasks": 4,
+    "longTaskMs": 964
+  },
+  "samples": [
+    {
+      "name": "ready",
+      "frames": 4,
+      "meanMs": 491.7,
+      "fps": 2,
+      "low1Fps": 2,
+      "p99Ms": 500.1,
+      "worstMs": 500.1,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "meshes": 141,
+      "shadows": 46,
+      "instances": 2,
+      "dpr": 1,
+      "streaming": null
+    },
+    {
+      "name": "aerial",
+      "frames": 2,
+      "meanMs": 475,
+      "fps": 2.1,
+      "low1Fps": 2.1,
+      "p99Ms": 483.2,
+      "worstMs": 483.2,
+      "longTasks": 1,
+      "longTaskMs": 71,
+      "meshes": 327,
+      "shadows": 157,
+      "instances": 14,
+      "dpr": 1,
+      "streaming": {
+        "center": "0,0",
+        "active": 2,
+        "high": 2,
+        "medium": 0,
+        "drawCalls": 146,
+        "triangles": 19346,
+        "frameMs": 142.4869760414843,
+        "geometries": 131,
+        "textures": 37,
+        "heapMB": 26.3214111328125
+      }
+    },
+    {
+      "name": "descent",
+      "frames": 3,
+      "meanMs": 227.8,
+      "fps": 4.4,
+      "low1Fps": 1.6,
+      "p99Ms": 633.3,
+      "worstMs": 633.3,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "meshes": 518,
+      "shadows": 238,
+      "instances": 14,
+      "dpr": 1,
+      "streaming": {
+        "center": "0,0",
+        "active": 4,
+        "high": 4,
+        "medium": 0,
+        "drawCalls": 286,
+        "triangles": 52760,
+        "frameMs": 143.94300553424205,
+        "geometries": 266,
+        "textures": 37,
+        "heapMB": 26.3214111328125
+      }
+    },
+    {
+      "name": "groundIdle",
+      "frames": 3,
+      "meanMs": 4616.5,
+      "fps": 0.2,
+      "low1Fps": 0.1,
+      "p99Ms": 11382.9,
+      "worstMs": 11382.9,
+      "longTasks": 4,
+      "longTaskMs": 15123,
+      "meshes": 1285,
+      "shadows": 618,
+      "instances": 14,
+      "dpr": 1,
+      "streaming": {
+        "center": "-1,0",
+        "active": 11,
+        "high": 11,
+        "medium": 0,
+        "drawCalls": 625,
+        "triangles": 160612,
+        "frameMs": 142.34609599967084,
+        "geometries": 653,
+        "textures": 37,
+        "heapMB": 26.3214111328125
+      }
+    },
+    {
+      "name": "walking",
+      "frames": 20,
+      "meanMs": 151.7,
+      "fps": 6.6,
+      "low1Fps": 2.3,
+      "p99Ms": 433.3,
+      "worstMs": 433.3,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "meshes": 1285,
+      "shadows": 618,
+      "instances": 14,
+      "dpr": 1,
+      "streaming": {
+        "center": "-1,0",
+        "active": 20,
+        "high": 11,
+        "medium": 9,
+        "drawCalls": 589,
+        "triangles": 177364,
+        "frameMs": 123.11286820513547,
+        "geometries": 655,
+        "textures": 37,
+        "heapMB": 26.3214111328125
+      }
+    },
+    {
+      "name": "sprinting",
+      "frames": 5,
+      "meanMs": 603.3,
+      "fps": 1.7,
+      "low1Fps": 1,
+      "p99Ms": 1050,
+      "worstMs": 1050,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "meshes": 1285,
+      "shadows": 618,
+      "instances": 14,
+      "dpr": 1,
+      "streaming": {
+        "center": "-1,0",
+        "active": 23,
+        "high": 11,
+        "medium": 12,
+        "drawCalls": 556,
+        "triangles": 181992,
+        "frameMs": 122.21601553228845,
+        "geometries": 655,
+        "textures": 37,
+        "heapMB": 26.3214111328125
+      }
+    },
+    {
+      "name": "chunkCrossing",
+      "frames": 3,
+      "meanMs": 1272.2,
+      "fps": 0.8,
+      "low1Fps": 0.5,
+      "p99Ms": 1916.6,
+      "worstMs": 1916.6,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "meshes": 1285,
+      "shadows": 618,
+      "instances": 14,
+      "dpr": 1,
+      "streaming": {
+        "center": "-2,-1",
+        "active": 23,
+        "high": 14,
+        "medium": 9,
+        "drawCalls": 275,
+        "triangles": 176586,
+        "frameMs": 136.38338779062585,
+        "geometries": 655,
+        "textures": 37,
+        "heapMB": 26.3214111328125
+      }
+    },
+    {
+      "name": "building",
+      "frames": 2,
+      "meanMs": 483.3,
+      "fps": 2.1,
+      "low1Fps": 1.2,
+      "p99Ms": 816.7,
+      "worstMs": 816.7,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "meshes": 1308,
+      "shadows": 623,
+      "instances": 14,
+      "dpr": 1,
+      "streaming": {
+        "center": "0,-2",
+        "active": 23,
+        "high": 15,
+        "medium": 8,
+        "drawCalls": 268,
+        "triangles": 178538,
+        "frameMs": 142.74504901156325,
+        "geometries": 655,
+        "textures": 37,
+        "heapMB": 26.3214111328125
+      }
+    },
+    {
+      "name": "range",
+      "frames": 4,
+      "meanMs": 675,
+      "fps": 1.5,
+      "low1Fps": 1,
+      "p99Ms": 983.3,
+      "worstMs": 983.3,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "meshes": 1322,
+      "shadows": 629,
+      "instances": 14,
+      "dpr": 1,
+      "streaming": {
+        "center": "1,0",
+        "active": 27,
+        "high": 19,
+        "medium": 8,
+        "drawCalls": 482,
+        "triangles": 196094,
+        "frameMs": 159.94818649195085,
+        "geometries": 1061,
+        "textures": 37,
+        "heapMB": 26.3214111328125
+      }
+    }
+  ],
+  "errors": [],
+  "wallTimeSeconds": 60
+}

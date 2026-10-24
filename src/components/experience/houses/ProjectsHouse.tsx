@@ -12,7 +12,7 @@ const EAVE = UPPER_Y + UPPER_H + 0.25
  * so the building shows how much loot is inside before you enter; the rack
  * upstairs is the one that opens the panel.
  */
-export function ProjectsHouse() {
+export function ProjectsHouse({ furnished = true }: { furnished?: boolean }) {
   const m = useBuildMats()
   const crateCount = Math.min(projects.length, 7)
 
@@ -24,7 +24,7 @@ export function ProjectsHouse() {
         <boxGeometry args={[17, 3, 15]} />
       </mesh>
 
-      <HouseInterior mats={m} lampColor="#cfe6d8">
+      <HouseInterior mats={m} lampColor="#cfe6d8" furnished={furnished}>
         {/* ── Content object: a shelving rack of numbered supply crates. ── */}
         <group position={[2.2, UPPER_Y, -IN_Z + 0.35]}>
           {[0, 1].map((shelf) => (

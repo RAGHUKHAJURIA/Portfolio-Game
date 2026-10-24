@@ -1,0 +1,11 @@
+Model Information:
+* title:	Blood Raven X Suit
+* source:	https://sketchfab.com/3d-models/blood-raven-x-suit-a5fd847b2d3c452aa1b7d2e416c0d3d0
+* author:	DFLEX (https://sketchfab.com/DFLEX)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Blood Raven X Suit" (https://sketchfab.com/3d-models/blood-raven-x-suit-a5fd847b2d3c452aa1b7d2e416c0d3d0) by DFLEX (https://sketchfab.com/DFLEX) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

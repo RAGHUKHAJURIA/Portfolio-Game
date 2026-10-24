@@ -15,6 +15,7 @@ function Batch<T>({ items, capacity, transform, castShadow = false, receiveShado
   useLayoutEffect(() => {
     const target = mesh.current
     if (!target) return
+    const start = performance.now()
     target.count = items.length
     for (let i = 0; i < items.length; i++) {
       dummy.position.set(0, 0, 0)
@@ -25,6 +26,8 @@ function Batch<T>({ items, capacity, transform, castShadow = false, receiveShado
       target.setMatrixAt(i, dummy.matrix)
     }
     target.instanceMatrix.needsUpdate = true
+    if (new URLSearchParams(location.search).has('debug'))
+      performance.measure('dropzone:prop-matrices', { start, end: performance.now() })
   }, [items, transform, dummy])
   return <instancedMesh ref={mesh} args={[undefined, undefined, capacity]}
     frustumCulled={false} castShadow={castShadow} receiveShadow={receiveShadow}>
@@ -98,15 +101,15 @@ export function StreamedProps({ content: c }: { content: ChunkContent }) {
       <icosahedronGeometry args={[1.6, 0]} />
       <meshStandardMaterial color="#425734" roughness={1} flatShading />
     </Batch>
-    <Batch items={c.broadleaf} capacity={CAP.broadleaf} transform={broadB} castShadow>
+    <Batch items={c.broadleaf} capacity={CAP.broadleaf} transform={broadB}>
       <icosahedronGeometry args={[1.1, 0]} />
       <meshStandardMaterial color="#51683d" roughness={1} flatShading />
     </Batch>
-    <Batch items={c.bushes} capacity={CAP.bushes} transform={bush} castShadow receiveShadow>
+    <Batch items={c.bushes} capacity={CAP.bushes} transform={bush} receiveShadow>
       <icosahedronGeometry args={[0.62, 0]} />
       <meshStandardMaterial color="#455631" roughness={1} flatShading />
     </Batch>
-    <Batch items={c.rocks} capacity={CAP.rocks} transform={rock} castShadow receiveShadow>
+    <Batch items={c.rocks} capacity={CAP.rocks} transform={rock} receiveShadow>
       <dodecahedronGeometry args={[0.85, 0]} />
       <meshStandardMaterial color="#6e6d64" roughness={0.95} flatShading />
     </Batch>
@@ -114,11 +117,11 @@ export function StreamedProps({ content: c }: { content: ChunkContent }) {
       <coneGeometry args={[0.22, 0.65, 4]} />
       <meshStandardMaterial color="#74854a" roughness={1} flatShading />
     </Batch>
-    <Batch items={c.shoreRocks} capacity={CAP.shoreRocks} transform={shore} castShadow receiveShadow>
+    <Batch items={c.shoreRocks} capacity={CAP.shoreRocks} transform={shore} receiveShadow>
       <dodecahedronGeometry args={[1.1, 0]} />
       <meshStandardMaterial color="#615f57" roughness={0.95} flatShading />
     </Batch>
-    <Batch items={c.boundaryPosts} capacity={CAP.boundaryPosts} transform={post} castShadow>
+    <Batch items={c.boundaryPosts} capacity={CAP.boundaryPosts} transform={post}>
       <cylinderGeometry args={[0.07, 0.07, 1.5, 5]} />
       <meshStandardMaterial color="#d8d5cc" roughness={0.9} />
     </Batch>

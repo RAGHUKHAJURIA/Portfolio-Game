@@ -11,7 +11,7 @@ const EAVE = UPPER_Y + UPPER_H + 0.25
  * obstacle course. One course obstacle per timeline entry outside; the
  * briefing board on the upper floor is what opens the panel.
  */
-export function ExperienceHouse() {
+export function ExperienceHouse({ furnished = true }: { furnished?: boolean }) {
   const m = useBuildMats()
 
   return (
@@ -25,7 +25,7 @@ export function ExperienceHouse() {
         <boxGeometry args={[16, 3, 16]} />
       </mesh>
 
-      <HouseInterior mats={m} lampColor="#cdbcff">
+      <HouseInterior mats={m} lampColor="#cdbcff" furnished={furnished}>
         {/* ── Content object: the briefing board and map table. ── */}
         <group position={[2.2, UPPER_Y, -IN_Z + 0.35]}>
           <mesh castShadow receiveShadow position={[0, 1.6, 0.06]} material={m.dark}>

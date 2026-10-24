@@ -4,6 +4,8 @@ import { Environment, Sky } from '@react-three/drei'
 import type { DirectionalLight, PointLight } from 'three'
 import { Vector3 } from 'three'
 import { cameraOrbit, playerState } from '../../state/controls'
+import { useGameStore } from '../../store/useGameStore'
+import { QUALITY } from '../../lib/quality'
 
 const SUN = new Vector3(-52, 46, -38)
 
@@ -27,12 +29,17 @@ const SKY = {
 export function Lighting() {
   const sun = useRef<DirectionalLight>(null)
   const fill = useRef<PointLight>(null)
+  const quality = useGameStore((s) => s.quality)
+  const shadowCenter = useRef({ x: Infinity, z: Infinity })
 
   useFrame(() => {
     // Track the player so a tight, high-resolution shadow frustum always
     // covers wherever they are, instead of stretching over the whole island.
     const l = sun.current
-    if (l) {
+    if (l && Math.hypot(playerState.x - shadowCenter.current.x,
+      playerState.z - shadowCenter.current.z) > 1.5) {
+      shadowCenter.current.x = playerState.x
+      shadowCenter.current.z = playerState.z
       l.position.set(playerState.x + SUN.x, SUN.y, playerState.z + SUN.z)
       l.target.position.set(playerState.x, 0, playerState.z)
       l.target.updateMatrixWorld()
@@ -101,7 +108,7 @@ export function Lighting() {
         intensity={2.6}
         color="#ffe6bd"
         position={[SUN.x, SUN.y, SUN.z]}
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[QUALITY[quality].shadowMap, QUALITY[quality].shadowMap]}
         shadow-camera-near={1}
         shadow-camera-far={190}
         shadow-camera-left={-46}

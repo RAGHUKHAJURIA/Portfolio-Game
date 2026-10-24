@@ -27,6 +27,9 @@ import { useKeyboardControls } from './hooks/useKeyboardControls'
 import { usePointerLook } from './hooks/usePointerLook'
 import { useGameStore } from './store/useGameStore'
 import { StreamingDebug } from './world/StreamingDebug'
+import { perfFlag } from './lib/perfFlags'
+import { QUALITY } from './lib/quality'
+import { QualityMonitor } from './components/experience/QualityMonitor'
 
 /** Touch-first device detection — decides joystick vs keyboard. */
 function useDeviceDetect() {
@@ -59,6 +62,7 @@ function Scene() {
       <ProximitySystem />
       {/* Last, so the composer's render pass sees the finished scene. */}
       <PostFx />
+      <QualityMonitor />
     </>
   )
 }
@@ -73,6 +77,7 @@ export default function App() {
   // modal. The last frame stays on screen as the backdrop. Every useFrame in
   // the scene clamps its delta, so the jump on resume is harmless.
   const paused = useGameStore((s) => s.activeHouse !== null || s.mapOpen)
+  const quality = useGameStore((s) => s.quality)
 
   // Probed once. Without WebGL the island can never start, so serve the same
   // content as a plain document rather than stranding the visitor on a
@@ -95,9 +100,9 @@ export default function App() {
   return (
     <div className="relative h-full w-full overflow-hidden bg-steel-900">
       <Canvas
-        shadows
+        shadows={!perfFlag('shadows')}
         frameloop={paused ? 'never' : 'always'}
-        dpr={[1, 1.75]}
+        dpr={QUALITY[quality].dpr}
         gl={{
           antialias: true,
           powerPreference: 'high-performance',

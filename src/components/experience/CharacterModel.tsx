@@ -340,7 +340,6 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
   const aimRef = useRef(0)
   const footL = useRef(0)
   const footR = useRef(0)
-  const rollRef = useRef(0)
   const headYaw = useRef(0)
   const headPitch = useRef(0)
 
@@ -378,11 +377,12 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
       // Skydive pose: arched back, arms and legs out.
       const flutter = Math.sin(performance.now() * 0.006) * 0.09
       const deployed = playerState.y < CHUTE_ALTITUDE
-      // Belly-to-earth in freefall, upright once the canopy takes the weight.
-      if (hips.current) hips.current.rotation.set(deployed ? -0.06 : -0.4, 0, 0)
-      if (chest.current) chest.current.rotation.x = (deployed ? 0.04 : 0.24) + flutter * 0.3
-      if (legL.current) legL.current.rotation.set(deployed ? 0.12 : 0.6 + flutter, 0, 0.16)
-      if (legR.current) legR.current.rotation.set(deployed ? 0.12 : 0.6 - flutter, 0, -0.16)
+      // Shape the skydive with joints. Hips parent the whole operator, so
+      // pitching that group would survive touchdown and tilt the full model.
+      if (hips.current) hips.current.rotation.set(0, 0, 0)
+      if (chest.current) chest.current.rotation.x = (deployed ? -0.02 : -0.16) + flutter * 0.3
+      if (legL.current) legL.current.rotation.set(deployed ? 0.06 : 0.2 + flutter, 0, 0.16)
+      if (legR.current) legR.current.rotation.set(deployed ? 0.06 : 0.2 - flutter, 0, -0.16)
       if (kneeL.current) kneeL.current.rotation.x = deployed ? 0.3 : 0.85
       if (kneeR.current) kneeR.current.rotation.x = deployed ? 0.3 : 0.85
       if (armL.current) armL.current.rotation.set(deployed ? -2.5 : -1.9, 0, (deployed ? 0.5 : 0.8) + flutter)
@@ -427,7 +427,9 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
         chest.current.rotation.x = leanRef.current * (1 - aim * 0.6)
         chest.current.rotation.y = Math.sin(t) * (gait ? 0.07 : 0) * (1 - aim)
       }
-      if (hips.current) hips.current.rotation.y = -Math.sin(t) * (gait ? 0.09 : 0) * (1 - aim * 0.7)
+      if (hips.current) hips.current.rotation.set(
+        0, -Math.sin(t) * (gait ? 0.09 : 0) * (1 - aim * 0.7), 0
+      )
     }
 
     /* ── Arms ─────────────────────────────────────────────── */
@@ -456,7 +458,7 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
     /* ── Foot planting ──────────────────────────────────────
        The island has 15° hills now, so a level stance leaves the uphill foot
        buried and the downhill one hanging in the air. Each leg drops to the
-       ground under its own foot and the hips roll toward the low side.
+       ground under its own foot while the operator's body stays upright.
 
        Sampled from the height field rather than raycast: terrainHeight is the
        same function the collider mesh is built from, so it is exact and costs
@@ -465,7 +467,6 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
        switches off, which is right anyway because floors are flat. */
     let targetL = 0
     let targetR = 0
-    let targetRoll = 0
     const outdoors = grounded && !insideHouse(playerState.x, playerState.y, playerState.z)
     if (outdoors) {
       const yaw = playerState.heading
@@ -480,14 +481,11 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
       // by much; clamping keeps a cliff edge from stretching a leg to nothing.
       targetL = Math.max(-MAX_FOOT_DROP, Math.min(0, gL - soleY))
       targetR = Math.max(-MAX_FOOT_DROP, Math.min(0, gR - soleY))
-      targetRoll = Math.max(-0.16, Math.min(0.16, (targetR - targetL) * 0.45))
     }
     footL.current = damp(footL.current, targetL, dt, 12)
     footR.current = damp(footR.current, targetR, dt, 12)
-    rollRef.current = damp(rollRef.current, targetRoll, dt, 9)
     if (legL.current) legL.current.position.y = footL.current
     if (legR.current) legR.current.position.y = footR.current
-    if (hips.current) hips.current.rotation.z = rollRef.current
 
     /* ── Head tracking ──────────────────────────────────────
        The head turns toward where the camera is looking rather than sweeping
@@ -532,7 +530,7 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
   })
 
   return (
-    <group ref={root}>
+    <group ref={root} name="CharacterVisualRoot">
       {/* Parachute — only visible once deployed. Sized and lifted so it never
           fills the frame from the over-the-shoulder camera. */}
       <group ref={chute} visible={false} position={[0, 4.6, 0]}>
@@ -558,7 +556,7 @@ export function CharacterModel({ dropping }: { dropping: boolean }) {
         )}
       </group>
 
-      <group ref={hips} position={[0, HIP_Y, 0]}>
+      <group ref={hips} name="CharacterPelvis" position={[0, HIP_Y, 0]}>
         {/* Belt and holster sit on the hips, so they don't swim with the torso */}
         <mesh castShadow position={[0, 0.03, 0]} material={mats.strap}>
           <boxGeometry args={[0.48, 0.1, 0.3]} />

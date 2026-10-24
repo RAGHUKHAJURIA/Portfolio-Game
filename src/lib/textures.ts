@@ -80,6 +80,7 @@ function heightField(): Float32Array {
 let cache: { normal: DataTexture; roughness: DataTexture } | null = null
 
 function build() {
+  const start = performance.now()
   const h = heightField()
   const at = (x: number, y: number) => h[mod(y, SIZE) * SIZE + mod(x, SIZE)]
 
@@ -110,6 +111,8 @@ function build() {
     }
   }
 
+  if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug'))
+    performance.measure('dropzone:textures', { start, end: performance.now() })
   return {
     normal: finish(new DataTexture(n, SIZE, SIZE, RGBAFormat)),
     roughness: finish(new DataTexture(r, SIZE, SIZE, RGBAFormat)),

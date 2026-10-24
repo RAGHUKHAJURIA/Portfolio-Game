@@ -1,0 +1,140 @@
+{
+  "boot": {
+    "readyAtMs": 4010,
+    "scripts": [
+      {
+        "name": "index-x-4gkvVI.js",
+        "transfer": 349982,
+        "duration": 101
+      },
+      {
+        "name": "rolldown-runtime-CNC7AqOf.js",
+        "transfer": 1179,
+        "duration": 17
+      },
+      {
+        "name": "three-Bxa-dGfc.js",
+        "transfer": 170350,
+        "duration": 86
+      },
+      {
+        "name": "rapier-BLJcvlGt.js",
+        "transfer": 761609,
+        "duration": 188
+      },
+      {
+        "name": "DetailChunk-Cr1XW-44.js",
+        "transfer": 13001,
+        "duration": 11
+      },
+      {
+        "name": "scatter-Duw92j0P.js",
+        "transfer": 1528,
+        "duration": 11
+      }
+    ],
+    "longTasks": 3,
+    "longTaskMs": 837
+  },
+  "samples": [
+    {
+      "name": "ready",
+      "frames": 5,
+      "meanMs": 396.7,
+      "fps": 2.5,
+      "low1Fps": 2.4,
+      "p99Ms": 416.6,
+      "worstMs": 416.6,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "meshes": 141,
+      "shadows": 46,
+      "instances": 2,
+      "dpr": 1,
+      "streaming": null
+    },
+    {
+      "name": "aerial",
+      "frames": 2,
+      "meanMs": 400,
+      "fps": 2.5,
+      "low1Fps": 2.5,
+      "p99Ms": 400,
+      "worstMs": 400,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "meshes": 193,
+      "shadows": 67,
+      "instances": 14,
+      "dpr": 1,
+      "streaming": {
+        "center": "0,0",
+        "active": 2,
+        "high": 2,
+        "medium": 0,
+        "drawCalls": 146,
+        "triangles": 19346,
+        "frameMs": 159.77773261928948,
+        "geometries": 131,
+        "textures": 37,
+        "heapMB": 23.365020751953125
+      }
+    },
+    {
+      "name": "descent",
+      "frames": 10,
+      "meanMs": 238.3,
+      "fps": 4.2,
+      "low1Fps": 1.8,
+      "p99Ms": 550.1,
+      "worstMs": 550.1,
+      "longTasks": 1,
+      "longTaskMs": 51,
+      "meshes": 418,
+      "shadows": 159,
+      "instances": 14,
+      "dpr": 1,
+      "streaming": {
+        "center": "0,0",
+        "active": 8,
+        "high": 8,
+        "medium": 0,
+        "drawCalls": 201,
+        "triangles": 105348,
+        "frameMs": 157.47476530960574,
+        "geometries": 185,
+        "textures": 37,
+        "heapMB": 23.365020751953125
+      }
+    },
+    {
+      "name": "groundIdle",
+      "frames": 9,
+      "meanMs": 307.4,
+      "fps": 3.3,
+      "low1Fps": 1.6,
+      "p99Ms": 616.7,
+      "worstMs": 616.7,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "meshes": 474,
+      "shadows": 179,
+      "instances": 14,
+      "dpr": 1,
+      "streaming": {
+        "center": "-1,0",
+        "active": 16,
+        "high": 12,
+        "medium": 4,
+        "drawCalls": 247,
+        "triangles": 173956,
+        "frameMs": 153.75719567741288,
+        "geometries": 220,
+        "textures": 37,
+        "heapMB": 23.365020751953125
+      }
+    }
+  ],
+  "errors": [],
+  "wallTimeSeconds": 26
+}

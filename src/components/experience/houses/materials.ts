@@ -1,4 +1,3 @@
-import { useEffect, useMemo } from 'react'
 import { MeshStandardMaterial, Vector2 } from 'three'
 import { tiled } from '../../../lib/textures'
 
@@ -13,8 +12,7 @@ import { tiled } from '../../../lib/textures'
  * breaks up the flat facets so the low sun grazes across concrete and canvas
  * instead of leaving each face one uniform tone.
  */
-export function useBuildMats() {
-  const mats = useMemo(() => {
+const mats = (() => {
     // Buildings are boxes with 0..1 UVs per face and faces a few units across,
     // so one tile density suits all of them and they can share the sampler.
     const normalMap = tiled('normal', 3)
@@ -59,14 +57,10 @@ export function useBuildMats() {
       // this and the aprons look like holes cut in the ground.
       tarmac: mk('#827c6e', 0.95, 0, 2),
     }
-  }, [])
-  useEffect(() => () => {
-    const unique = new Set(Object.values(mats))
-    for (const material of unique) material.dispose()
-    mats.concrete.normalMap?.dispose()
-    mats.concrete.roughnessMap?.dispose()
-  }, [mats])
-  return mats
-}
+})()
+
+// These resources belong to the world module, not to a particular house.
+// Disposing them when one streamed house leaves would invalidate its neighbors.
+export function useBuildMats() { return mats }
 
 export type BuildMats = ReturnType<typeof useBuildMats>

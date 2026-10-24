@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { HouseId } from '../data/portfolioData'
+import { initialQuality, type Quality } from '../lib/quality'
 
 export type Phase = 'loading' | 'ready' | 'dropping' | 'playing'
 
@@ -16,6 +17,7 @@ type GameState = {
   subIndex: number | null
   /** Touch device — swaps to on-screen controls. */
   isMobile: boolean
+  quality: Quality
   /** Player has moved at least once — used to fade the controls legend. */
   hasMoved: boolean
   /** Houses the player has opened at least once. */
@@ -39,6 +41,7 @@ type GameState = {
   closeHouse: () => void
   setSubIndex: (i: number | null) => void
   setIsMobile: (m: boolean) => void
+  setQuality: (q: Quality) => void
   setReducedMode: (r: boolean) => void
   markMoved: () => void
   toggleMute: () => void
@@ -56,6 +59,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   activeHouse: null,
   subIndex: null,
   isMobile: false,
+  quality: initialQuality(),
   hasMoved: false,
   visited: {},
   muted: false,
@@ -79,6 +83,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   closeHouse: () => set({ activeHouse: null, subIndex: null }),
   setSubIndex: (subIndex) => set({ subIndex }),
   setIsMobile: (isMobile) => set({ isMobile }),
+  setQuality: (quality) => set({ quality }),
   setReducedMode: (reducedMode) => set({ reducedMode }),
   markMoved: () => {
     if (!get().hasMoved) set({ hasMoved: true })

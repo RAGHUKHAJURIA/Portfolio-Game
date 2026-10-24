@@ -15,7 +15,7 @@ const EAVE = UPPER_Y + UPPER_H + 0.25
  * There is no solid collider block any more — the building is hollow and
  * walk-in, so the walls themselves are the collision.
  */
-export function AboutHouse() {
+export function AboutHouse({ furnished = true }: { furnished?: boolean }) {
   const m = useBuildMats()
 
   return (
@@ -26,7 +26,7 @@ export function AboutHouse() {
         <boxGeometry args={[OUT_X * 2 + 0.7, 0.4, OUT_Z * 2 + 0.9]} />
       </mesh>
 
-      <HouseInterior mats={m}>
+      <HouseInterior mats={m} furnished={furnished}>
         {/* ── Content object: a corkboard and desk on the upper floor. The
                panel opens from here, so you have to climb to reach it. ── */}
         <group position={[2.2, UPPER_Y, -IN_Z + 0.35]}>
