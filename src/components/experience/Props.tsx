@@ -1,18 +1,18 @@
-import type { ComponentProps } from 'react'
+import { createContext, useContext, type ComponentProps } from 'react'
 import { Instance, Instances } from '@react-three/drei'
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
-import {
-  BOUNDARY_POSTS,
-  BROADLEAF,
-  BUSHES,
-  DEBRIS,
-  PINES,
-  ROCKS,
-  SHORE_ROCKS,
-  TREES,
-  TUFTS,
-} from '../../lib/scatter'
 import { terrainHeight } from '../../lib/terrain'
+import type { ChunkContent } from '../../world/manifest'
+import type { Detail } from '../../world/config'
+
+const PropContext = createContext<ChunkContent | null>(null)
+const DetailContext = createContext<Detail>('high')
+const ColliderContext = createContext<ChunkContent | null>(null)
+function props() {
+  const value = useContext(PropContext)
+  if (!value) throw new Error('Prop chunk missing context')
+  return value
+}
 
 /**
  * `<Instances limit>` allocates its buffer up front and silently drops
@@ -52,6 +52,9 @@ function Batch(props: ComponentProps<typeof Instances>) {
 /* ── Vegetation ─────────────────────────────────────────── */
 
 function Trees() {
+  const { trees: TREES, pines: PINES, broadleaf: BROADLEAF } = props()
+  const high = useContext(DetailContext) === 'high'
+  const colliderTrees = useContext(ColliderContext)?.trees ?? TREES
   return (
     <>
       {/* Trunks (shared across both tree types) */}
@@ -118,20 +121,21 @@ function Trees() {
           trunk — an oversized box here reads as an invisible wall. The
           canopies deliberately have no collider: you walk through foliage.
           The camera avoids them analytically instead (see lib/scatter). */}
-      <RigidBody type="fixed" colliders={false}>
-        {TREES.map((t, i) => (
+      {high && <RigidBody type="fixed" colliders={false}>
+        {colliderTrees.map((t, i) => (
           <CuboidCollider
             key={i}
             args={[0.2 * t.scale, 1.4 * t.scale, 0.2 * t.scale]}
             position={[t.x, t.y + 1.4 * t.scale, t.z]}
           />
         ))}
-      </RigidBody>
+      </RigidBody>}
     </>
   )
 }
 
 function Bushes() {
+  const { bushes: BUSHES } = props()
   return (
     <Batch limit={cap(BUSHES.length)} range={BUSHES.length} castShadow receiveShadow>
       <icosahedronGeometry args={[0.62, 0]} />
@@ -149,7 +153,10 @@ function Bushes() {
 }
 
 function Rocks() {
-  const big = ROCKS.filter((r) => r.scale > 1.15)
+  const { rocks: ROCKS } = props()
+  const high = useContext(DetailContext) === 'high'
+  const colliderRocks = useContext(ColliderContext)?.rocks ?? ROCKS
+  const big = colliderRocks.filter((r) => r.scale > 1.15)
 
   return (
     <>
@@ -165,7 +172,7 @@ function Rocks() {
           />
         ))}
       </Batch>
-      <RigidBody type="fixed" colliders={false}>
+      {high && <RigidBody type="fixed" colliders={false}>
         {big.map((r, i) => (
           <CuboidCollider
             key={i}
@@ -173,12 +180,13 @@ function Rocks() {
             position={[r.x, r.y + 0.5 * r.scale, r.z]}
           />
         ))}
-      </RigidBody>
+      </RigidBody>}
     </>
   )
 }
 
 function GrassTufts() {
+  const { tufts: TUFTS } = props()
   return (
     <Batch limit={cap(TUFTS.length)} range={TUFTS.length} receiveShadow>
       <coneGeometry args={[0.22, 0.65, 4]} />
@@ -198,6 +206,7 @@ function GrassTufts() {
 /* ── Set dressing ───────────────────────────────────────── */
 
 function ShoreRocks() {
+  const { shoreRocks: SHORE_ROCKS } = props()
   return (
     <Batch limit={cap(SHORE_ROCKS.length)} range={SHORE_ROCKS.length} castShadow receiveShadow>
       <dodecahedronGeometry args={[1.1, 0]} />
@@ -216,6 +225,7 @@ function ShoreRocks() {
 
 /** Red-and-white posts marking the edge of the play area. */
 function BoundaryPosts() {
+  const { boundaryPosts: BOUNDARY_POSTS } = props()
   return (
     <>
       <Batch limit={cap(BOUNDARY_POSTS.length)} range={BOUNDARY_POSTS.length} castShadow>
@@ -278,6 +288,7 @@ function DropPlaza() {
 
 /** Wrecked vehicles, containers and ruins scattered along the trails. */
 function Debris() {
+  const { debris: DEBRIS } = props()
   return (
     <>
       {DEBRIS.map((s, i) => {
@@ -348,14 +359,14 @@ function Debris() {
  * with. They exist so the enlarged island has something to navigate by and
  * something to walk toward that isn't one of the five compounds.
  */
-function Landmarks() {
+function Landmarks({ kind }: { kind: 'tower' | 'cargo' }) {
   const tower = terrainHeight(-104, -84)
   const cargo = terrainHeight(96, 96)
 
   return (
     <>
       {/* Watchtower — four splayed legs, a caged platform, a shallow roof. */}
-      <RigidBody type="fixed" colliders={false} position={[-104, tower, -84]} rotation={[0, 0.6, 0]}>
+      {kind === 'tower' && <RigidBody type="fixed" colliders={false} position={[-104, tower, -84]} rotation={[0, 0.6, 0]}>
         {[
           [-1, -1],
           [1, -1],
@@ -399,10 +410,10 @@ function Landmarks() {
           <meshStandardMaterial color="#46504a" roughness={0.9} flatShading />
         </mesh>
         <CuboidCollider args={[2.6, 5.2, 2.6]} position={[0, 5.2, 0]} />
-      </RigidBody>
+      </RigidBody>}
 
       {/* Downed cargo crate, half-buried, chute still tangled on it. */}
-      <RigidBody type="fixed" colliders={false} position={[96, cargo, 96]} rotation={[0.1, -0.8, 0.05]}>
+      {kind === 'cargo' && <RigidBody type="fixed" colliders={false} position={[96, cargo, 96]} rotation={[0.1, -0.8, 0.05]}>
         <mesh castShadow receiveShadow position={[0, 1.1, 0]}>
           <boxGeometry args={[5, 2.4, 3.4]} />
           <meshStandardMaterial color="#8a5a3c" roughness={0.95} flatShading />
@@ -417,23 +428,46 @@ function Landmarks() {
           <meshStandardMaterial color="#c9ccc4" roughness={0.95} side={2} flatShading />
         </mesh>
         <CuboidCollider args={[2.5, 1.2, 1.7]} position={[0, 1.1, 0]} />
-      </RigidBody>
+      </RigidBody>}
     </>
   )
 }
 
-export function Props() {
+export function Props({ content, detail, colliders }: { content: ChunkContent; detail: Detail; colliders?: ChunkContent }) {
   return (
-    <>
+    <PropContext.Provider value={content}>
+    <DetailContext.Provider value={detail}>
+    <ColliderContext.Provider value={colliders ?? null}>
       <Trees />
       <Bushes />
       <Rocks />
-      <GrassTufts />
+      {detail === 'high' && <GrassTufts />}
       <ShoreRocks />
       <BoundaryPosts />
-      <DropPlaza />
-      <Debris />
-      <Landmarks />
-    </>
+      {detail === 'high' && <Debris />}
+    </ColliderContext.Provider>
+    </DetailContext.Provider>
+    </PropContext.Provider>
   )
+}
+
+export function CentralProps() { return <DropPlaza /> }
+export function LandmarkProps({ kind }: { kind: 'tower' | 'cargo' }) { return <Landmarks kind={kind} /> }
+
+/** Collision bodies stay owned by the high-detail cell that contains them. */
+export function ChunkPropColliders({ content }: { content: ChunkContent }) {
+  return <>
+    <RigidBody type="fixed" colliders={false}>
+      {content.trees.map((t, i) => <CuboidCollider key={i}
+        args={[0.2 * t.scale, 1.4 * t.scale, 0.2 * t.scale]}
+        position={[t.x, t.y + 1.4 * t.scale, t.z]} />)}
+      {content.rocks.filter((r) => r.scale > 1.15).map((r, i) => <CuboidCollider key={`r${i}`}
+        args={[0.85 * r.scale, 0.7 * r.scale, 0.75 * r.scale]}
+        position={[r.x, r.y + 0.5 * r.scale, r.z]} />)}
+    </RigidBody>
+  </>
+}
+
+export function ChunkDebris({ content }: { content: ChunkContent }) {
+  return <PropContext.Provider value={content}><Debris /></PropContext.Provider>
 }

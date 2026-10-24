@@ -9,6 +9,9 @@ import {
 } from 'three'
 import { houses, ISLAND, projects, loadout, timeline, profile, contactChannels } from '../src/data/portfolioData.ts'
 import { terrainHeight, pathStrength, houseGroundY, INLETS, isSubmerged } from '../src/lib/terrain.ts'
+import { TREES, BUSHES, ROCKS, TUFTS, DEBRIS, SHORE_ROCKS, BOUNDARY_POSTS } from '../src/lib/scatter.ts'
+import { CHUNK_SIZE, MIN_CHUNK, MAX_CHUNK, chunkOf, STREAMING } from '../src/world/config.ts'
+import { contentFor } from '../src/world/manifest.ts'
 
 /** Inside a declared water inlet, where being under the waterline is the point. */
 const inInlet = (x: number, z: number) =>
@@ -269,6 +272,21 @@ check(
   contactChannels.every((c) => /^(https:\/\/|mailto:)\S+$/.test(c.href)),
   contactChannels.filter((c) => !/^(https:\/\/|mailto:)\S+$/.test(c.href)).map((c) => c.id).join(' ')
 )
+
+console.log('\n--- streaming manifest ---')
+check('six cells span each world axis', (MAX_CHUNK - MIN_CHUNK + 1) * CHUNK_SIZE === ISLAND.half * 2)
+check('landing target is inside the grid', chunkOf(0, 9).x === 0 && chunkOf(0, 9).z === 0)
+check('active radius has unload delay', STREAMING.unloadDelay > STREAMING.updateInterval)
+for (const [label, source, key] of [
+  ['trees', TREES, 'trees'], ['bushes', BUSHES, 'bushes'], ['rocks', ROCKS, 'rocks'],
+  ['grass', TUFTS, 'tufts'], ['debris', DEBRIS, 'debris'],
+  ['shore rocks', SHORE_ROCKS, 'shoreRocks'], ['posts', BOUNDARY_POSTS, 'boundaryPosts'],
+] as const) {
+  let assigned = 0
+  for (let x = MIN_CHUNK; x <= MAX_CHUNK; x++)
+    for (let z = MIN_CHUNK; z <= MAX_CHUNK; z++) assigned += contentFor({ x, z })[key].length
+  check(`${label} assigned to exactly one cell`, assigned === source.length, `${assigned}/${source.length}`)
+}
 
 console.log(`\n${fail === 0 ? 'âœ… all checks passed' : `âŒ ${fail} check(s) failed`}`)
 process.exit(fail === 0 ? 0 : 1)

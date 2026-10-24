@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
-import { AdaptiveDpr, PerformanceMonitor, Preload } from '@react-three/drei'
+import { AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
 import { ACESFilmicToneMapping } from 'three'
 
 import { Island } from './components/experience/Island'
@@ -26,6 +26,7 @@ import { hasWebGL } from './lib/webgl'
 import { useKeyboardControls } from './hooks/useKeyboardControls'
 import { usePointerLook } from './hooks/usePointerLook'
 import { useGameStore } from './store/useGameStore'
+import { StreamingDebug } from './world/StreamingDebug'
 
 /** Touch-first device detection — decides joystick vs keyboard. */
 function useDeviceDetect() {
@@ -58,7 +59,6 @@ function Scene() {
       <ProximitySystem />
       {/* Last, so the composer's render pass sees the finished scene. */}
       <PostFx />
-      <Preload all />
     </>
   )
 }
@@ -115,6 +115,7 @@ export default function App() {
         onCreated={(s) => {
           if (new URLSearchParams(location.search).has('debug')) {
             ;(window as unknown as { __r3f?: unknown }).__r3f = s
+            s.gl.info.autoReset = false
           }
         }}
       >
@@ -137,6 +138,7 @@ export default function App() {
       <FullMap />
       <SectionModal />
       <LoadingScreen />
+      <StreamingDebug />
     </div>
   )
 }

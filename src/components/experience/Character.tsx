@@ -159,8 +159,18 @@ export function Character() {
       let y = pos.y + velY.current * dt
       // Ease horizontally toward the landing zone as altitude bleeds off.
       const k = Math.min(1, dt * (underChute ? 0.85 : 0.35))
-      const x = pos.x + (DROP_TO[0] - pos.x) * k
-      const z = pos.z + (DROP_TO[1] - pos.z) * k
+      // The watchdog uses wall time. On a slow renderer a few large frames
+      // otherwise end the drop while XZ is still near the starting house.
+      // Keep the original easing, but guarantee horizontal arrival by the
+      // same deadline so the landing position and streamed collision agree.
+      const deadlineT = Math.min(1, dropElapsed.current / MAX_DROP_SECONDS)
+      const minArrival = deadlineT * deadlineT * (3 - 2 * deadlineT)
+      const easedX = pos.x + (DROP_TO[0] - pos.x) * k
+      const easedZ = pos.z + (DROP_TO[1] - pos.z) * k
+      const x = DROP_TO[0] + (DROP_FROM[0] - DROP_TO[0]) *
+        Math.min((easedX - DROP_TO[0]) / (DROP_FROM[0] - DROP_TO[0]), 1 - minArrival)
+      const z = DROP_TO[1] + (DROP_FROM[2] - DROP_TO[1]) *
+        Math.min((easedZ - DROP_TO[1]) / (DROP_FROM[2] - DROP_TO[1]), 1 - minArrival)
 
       const groundY = terrainHeight(x, z) + FEET_OFFSET
       // Wall-clock watchdog. However badly the device is performing, the

@@ -266,6 +266,30 @@ non-browser requests, which is not the same as being broken.
 
 ---
 
+## World streaming
+
+The aerial scene mounts only a low-resolution terrain silhouette, simple
+building/landmark shapes, and a small tree proxy. Once the visitor drops,
+`src/world/WorldStreaming.tsx` streams 62-unit cells around the scripted
+landing point, then follows the player. High-detail cells own their terrain
+colliders, building interiors, debris, and prop colliders. Medium cells use
+sparser vegetation; distant cells retain only the lightweight proxy. A cell
+outside the active radius is released after a short delay.
+
+Tune cell size, desktop/mobile detail radii, movement prediction, unloading
+delay, and terrain resolution in `src/world/config.ts`. The source island extent is in
+`src/data/portfolioData.ts`. The procedural content index is
+`src/world/manifest.ts`; it holds metadata and placement arrays, not meshes.
+`src/world/StreamedProps.tsx` keeps one GPU instance batch per prop type and
+updates instance matrices when cells change.
+
+Add `?debug` to the URL to see active cells, detail levels, frame time, render
+calls, triangles, GPU geometry count, and texture count. The same values are
+available as `window.__streaming` for browser automation. These counters are
+browser and device dependent; compare runs on the same hardware.
+
+---
+
 ## Licensing
 
 The PUBG *aesthetic* — military palette, battle-royale island, loot crates —

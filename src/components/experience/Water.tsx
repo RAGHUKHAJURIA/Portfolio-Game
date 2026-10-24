@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { BufferAttribute } from 'three'
 import { PlaneGeometry, Vector2 } from 'three'
@@ -8,7 +8,7 @@ import { tiled } from '../../lib/textures'
 /** Wide enough that the far edge is always buried in fog. */
 const SIZE = 1300
 /** ~13.5 units per facet — matches the old density, so the swells still read. */
-const SEG = 96
+const SEG = 64
 const CHOP_SCALE = new Vector2(0.65, 0.65)
 
 /**
@@ -20,6 +20,7 @@ const CHOP_SCALE = new Vector2(0.65, 0.65)
  * surface costs no blending and can write depth.
  */
 export function Water() {
+  const lastWaveUpdate = useRef(-1)
   const geometry = useMemo(() => {
     const g = new PlaneGeometry(SIZE, SIZE, SEG, SEG)
     g.rotateX(-Math.PI / 2)
@@ -45,6 +46,8 @@ export function Water() {
   useFrame(({ clock }) => {
     const t = clock.elapsedTime
     chop.offset.set(t * 0.006, t * -0.0045)
+    if (t - lastWaveUpdate.current < 1 / 30) return
+    lastWaveUpdate.current = t
     const pos = geometry.attributes.position as BufferAttribute
     const arr = pos.array as Float32Array
     for (let i = 0; i < pos.count; i++) {

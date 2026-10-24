@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { MeshStandardMaterial, Vector2 } from 'three'
 import { tiled } from '../../../lib/textures'
 
@@ -14,7 +14,7 @@ import { tiled } from '../../../lib/textures'
  * instead of leaving each face one uniform tone.
  */
 export function useBuildMats() {
-  return useMemo(() => {
+  const mats = useMemo(() => {
     // Buildings are boxes with 0..1 UVs per face and faces a few units across,
     // so one tile density suits all of them and they can share the sampler.
     const normalMap = tiled('normal', 3)
@@ -60,6 +60,13 @@ export function useBuildMats() {
       tarmac: mk('#827c6e', 0.95, 0, 2),
     }
   }, [])
+  useEffect(() => () => {
+    const unique = new Set(Object.values(mats))
+    for (const material of unique) material.dispose()
+    mats.concrete.normalMap?.dispose()
+    mats.concrete.roughnessMap?.dispose()
+  }, [mats])
+  return mats
 }
 
 export type BuildMats = ReturnType<typeof useBuildMats>

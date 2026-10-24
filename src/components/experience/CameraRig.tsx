@@ -5,7 +5,7 @@ import { Vector3 } from 'three'
 import { cameraOrbit, playerState } from '../../state/controls'
 import { useGameStore } from '../../store/useGameStore'
 import { terrainHeight } from '../../lib/terrain'
-import { CANOPIES } from '../../lib/scatter'
+import type { Canopy } from '../../lib/scatter'
 import { insideHouse } from './houses/HouseInterior'
 
 const HEAD_HEIGHT = 1.55
@@ -32,9 +32,9 @@ const rawWorld = (w: unknown): any => (w as any)?.raw?.() ?? (w as any)?.current
  * considered, so this stays a handful of arithmetic ops per frame rather than
  * a sweep over all ~90 trees.
  */
-function canopyHit(ox: number, oy: number, oz: number, dir: Vector3, maxT: number): number | null {
+function canopyHit(ox: number, oy: number, oz: number, dir: Vector3, maxT: number, canopies: Canopy[]): number | null {
   let best: number | null = null
-  for (const c of CANOPIES) {
+  for (const c of canopies) {
     const dx = c.x - ox
     const dz = c.z - oz
     // Cheap XZ reject before touching the full 3D maths.
@@ -68,6 +68,16 @@ export function CameraRig() {
   const boom = useRef(cameraOrbit.distance)
   const initialised = useRef(false)
   const phase = useGameStore((s) => s.phase)
+  const canopies = useRef<Canopy[]>([])
+
+  useEffect(() => {
+    if (phase === 'loading' || phase === 'ready') return
+    let cancelled = false
+    import('../../lib/scatter').then((m) => {
+      if (!cancelled) canopies.current = m.CANOPIES
+    }).catch((error) => console.error('Canopy data failed to load', error))
+    return () => { cancelled = true }
+  }, [phase])
 
   // The drop teleports the character 40 units into the air. Damping toward
   // that would leave the camera far below, and the character would fall
@@ -136,7 +146,7 @@ export function CameraRig() {
       // Tree canopies are not physics colliders (you walk through foliage), so
       // the ray above sails right through them. Test them here instead, or the
       // camera ends up parked inside a ball of leaves.
-      const canopyToi = canopyHit(_target.x, _target.y, _target.z, _dir, wanted)
+      const canopyToi = canopyHit(_target.x, _target.y, _target.z, _dir, wanted, canopies.current)
       if (canopyToi !== null) wanted = Math.min(wanted, canopyToi - 0.5)
     }
 
