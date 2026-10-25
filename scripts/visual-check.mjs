@@ -40,6 +40,12 @@ const watch = (p, tag = '') => {
 }
 
 const page = watch(await browser.newPage({ viewport: { width: 1366, height: 768 } }))
+let playerModelRequestCount = 0
+page.on('request', (request) => {
+  if (request.url().includes('/models/player/blood_raven_x_suit/scene_rigged.glb')) {
+    playerModelRequestCount++
+  }
+})
 
 /**
  * Capture via CDP rather than page.screenshot().
@@ -95,11 +101,16 @@ await wait(9000)
 await shot('03-landed')
 await page.locator('button[title="Open ABOUT"]').waitFor({ state: 'visible', timeout: 90000 })
 console.log('Landed, HUD is up.')
+if (playerModelRequestCount !== 1) {
+  errors.push(`player GLB request count was ${playerModelRequestCount}, expected exactly one`)
+} else {
+  console.log('Player GLB network requests: 1')
+}
 
 const assertUpright = async (label) => {
   const pose = await page.evaluate(() => {
     const state = window.__r3f?.getState?.() ?? window.__r3f
-    return ['CharacterYawRoot', 'CharacterVisualRoot', 'CharacterPelvis'].map((name) => {
+    return ['CharacterYawRoot', 'PlayerModelCorrectionRoot'].map((name) => {
       const group = state?.scene?.getObjectByName?.(name)
       if (!group) return { name, missing: true }
       group.updateWorldMatrix(true, false)
@@ -186,6 +197,26 @@ await page.keyboard.down('KeyW')
 await wait(1600)
 await shot('05-walking')
 await assertUpright('walking')
+const walkRigPose = async () => page.evaluate(() => {
+  const state = window.__r3f?.getState?.() ?? window.__r3f
+  const leg = state?.scene?.getObjectByName?.('LeftUpperLeg')
+  const arm = state?.scene?.getObjectByName?.('RightUpperArm')
+  return leg && arm ? [leg.rotation.x, arm.rotation.x] : null
+})
+const walkSamples = []
+for (let i = 0; i < 5; i++) {
+  walkSamples.push(await walkRigPose())
+  await wait(120)
+}
+const walkLegRange = Math.max(...walkSamples.filter(Boolean).map((pose) => pose[0])) -
+  Math.min(...walkSamples.filter(Boolean).map((pose) => pose[0]))
+const walkArmRange = Math.max(...walkSamples.filter(Boolean).map((pose) => pose[1])) -
+  Math.min(...walkSamples.filter(Boolean).map((pose) => pose[1]))
+if (walkSamples.some((pose) => !pose) || walkLegRange < 0.12 || walkArmRange < 0.12) {
+  errors.push(`walk animation did not move leg and arm bones: ${JSON.stringify({ walkLegRange, walkArmRange, walkSamples })}`)
+} else {
+  console.log(`Walk rig range: leg ${walkLegRange.toFixed(2)}, arm ${walkArmRange.toFixed(2)} rad`)
+}
 
 // On a hill flank, where foot planting actually has something to do: a level
 // stance here buries the uphill boot and hangs the downhill one in the air.
@@ -223,7 +254,40 @@ await page.mouse.up({ button: 'right' })
 await wait(600)
 
 if (quick) {
+  await page.keyboard.down('ShiftLeft')
+  await wait(550)
+  const runPoseA = await walkRigPose()
+  await wait(250)
+  const runPoseB = await walkRigPose()
+  if (!runPoseA || !runPoseB || Math.abs(runPoseB[0] - runPoseA[0]) < 0.05) {
+    errors.push(`run animation did not move leg bones: ${JSON.stringify({ runPoseA, runPoseB })}`)
+  } else {
+    console.log(`Run rig motion: leg Δ${(runPoseB[0] - runPoseA[0]).toFixed(2)}`)
+  }
+  await shot('06-sprinting')
+  await assertUpright('sprinting')
+  await page.keyboard.up('ShiftLeft')
   await page.keyboard.up('KeyW')
+  await wait(350)
+  const readPlayerY = () => page.evaluate(() => {
+    const state = window.__r3f?.getState?.() ?? window.__r3f
+    const root = state?.scene?.getObjectByName?.('CharacterYawRoot')
+    root?.updateWorldMatrix(true, false)
+    return root?.matrixWorld.elements[13] ?? null
+  })
+  const yBeforeJump = await readPlayerY()
+  await page.keyboard.press('Space')
+  await wait(250)
+  const yDuringJump = await readPlayerY()
+  if (yBeforeJump === null || yDuringJump === null || yDuringJump - yBeforeJump < 0.1) {
+    errors.push(`jump did not raise the player: ${JSON.stringify({ yBeforeJump, yDuringJump })}`)
+  } else {
+    console.log(`Jump controller rise: ${(yDuringJump - yBeforeJump).toFixed(2)}m`)
+  }
+  await shot('07-jump')
+  await assertUpright('jump')
+  await wait(1000)
+  await assertUpright('post-jump')
   await browser.close()
   console.log(errors.length ? `\nQUICK FAIL\n  x ${errors.join('\n  x ')}` : '\nQUICK PASS')
   process.exit(errors.length ? 1 : 0)

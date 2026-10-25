@@ -127,6 +127,8 @@ export function Character() {
     playerState.z = DROP_FROM[2]
     playerState.gait = 0
     playerState.speed = 0
+    playerState.verticalVelocity = 0
+    playerState.landedAt = 0
     dropStarted.current = true
     dropElapsed.current = 0
     // Point the camera down the drop line for a wide hero shot.
@@ -155,6 +157,7 @@ export function Character() {
       const underChute = pos.y < CHUTE_ALTITUDE
       const target = underChute ? CHUTE_SPEED : FREEFALL_TERMINAL
       velY.current += (target - velY.current) * Math.min(1, dt * (underChute ? 4.5 : 2.2))
+      playerState.verticalVelocity = velY.current
 
       let y = pos.y + velY.current * dt
       // Ease horizontally toward the landing zone as altitude bleeds off.
@@ -196,6 +199,8 @@ export function Character() {
 
       if (landed) {
         velY.current = 0
+        playerState.verticalVelocity = 0
+        playerState.landedAt = performance.now()
         playLand()
         spawnDust(x, y - FEET_OFFSET, z, 2.4)
         // Pull the camera back in from the wide drop framing to the normal
@@ -321,12 +326,18 @@ export function Character() {
     b.setNextKinematicTranslation({ x: nx, y: ny, z: nz })
 
     if (nowGrounded && !wasGrounded.current && velY.current < -6) {
+      playerState.landedAt = performance.now()
       playLand()
       spawnDust(nx, ny - FEET_OFFSET, nz, 1.8)
     }
     wasGrounded.current = nowGrounded
 
-    const speed = Math.hypot(velX.current, velZ.current)
+    // Drive animation and footstep cadence from what the Rapier controller
+    // actually moved this frame. Desired velocity can remain high against a
+    // wall, which made the old visual gait run in place after a collision.
+    const movedX = nx - pos.x
+    const movedZ = nz - pos.z
+    const speed = Math.hypot(movedX, movedZ) / Math.max(dt, 1e-4)
 
     // Face the direction of travel.
     if (intent > 0.05 && speed > 0.25) {
@@ -340,6 +351,7 @@ export function Character() {
     playerState.z = nz
     playerState.heading = yaw.current
     playerState.speed = speed
+    playerState.verticalVelocity = velY.current
     playerState.grounded = nowGrounded
     playerState.gait = speed < 0.35 ? 0 : speed < WALK_SPEED + 1.2 ? 1 : 2
 

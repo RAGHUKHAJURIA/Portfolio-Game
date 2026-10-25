@@ -47,6 +47,9 @@ export const playerState = {
   grounded: true,
   /** 0 idle, 1 walk, 2 run */
   gait: 0 as 0 | 1 | 2,
+  /** Controller data consumed by the character animation state machine. */
+  verticalVelocity: 0,
+  landedAt: 0,
   /** 0 = weapon lowered … 1 = fully shouldered. Damped, not a boolean, so the
    *  camera FOV, the crosshair and the arms all ease together. */
   aim: 0,
