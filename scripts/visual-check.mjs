@@ -15,6 +15,8 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 const base = process.argv[2] ?? 'http://localhost:4173'
 const outDir = process.argv[3] ?? 'shots'
 const quick = !!process.env.QUICK
+const playerOnly = !!process.env.PLAYER_ONLY
+const lowQuality = !!process.env.VERIFY_LOW || playerOnly
 mkdirSync(outDir, { recursive: true })
 
 const errors = []
@@ -39,10 +41,10 @@ const watch = (p, tag = '') => {
   return p
 }
 
-const page = watch(await browser.newPage({ viewport: { width: 1366, height: 768 } }))
+const page = watch(await browser.newPage({ viewport: lowQuality ? { width: 960, height: 540 } : { width: 1366, height: 768 } }))
 let playerModelRequestCount = 0
 page.on('request', (request) => {
-  if (request.url().includes('/models/player/blood_raven_x_suit/scene_rigged.glb')) {
+  if (request.url().includes('/models/player/blood_raven_x_suit/walk.glb')) {
     playerModelRequestCount++
   }
 })
@@ -71,7 +73,7 @@ const shot = async (name, target = page) => {
 const wait = (ms) => page.waitForTimeout(ms)
 
 console.log(`Loading ${base} ...`)
-await page.goto(`${base}?debug`, { waitUntil: 'load', timeout: 60000 })
+await page.goto(`${base}?debug${lowQuality ? '&quality=low' : ''}`, { waitUntil: 'load', timeout: 60000 })
 
 // Confirm WebGL actually came up.
 const glInfo = await page.evaluate(() => {
@@ -127,6 +129,39 @@ const assertUpright = async (label) => {
   console.log(`${label} upright: ${pose.every((g) => !g.missing && Math.abs(g.roll) <= 0.001)}`)
 }
 await assertUpright('landed')
+
+if (playerOnly) {
+  await page.evaluate(() => window.__tp(0, 3.6, 9))
+  await page.waitForFunction(() => window.__characterAnimation?.().grounded, null, { timeout: 30000 })
+  const initial = await page.evaluate(() => window.__characterAnimation())
+  if (!initial.clips.some((c) => c.name === 'Walk' && Math.abs(c.duration - 1) < .001)) errors.push('Expected one-second Walk clip')
+  await page.keyboard.down('KeyW')
+  await page.waitForFunction(() => window.__characterAnimation?.().walkLoops >= 4, null, { timeout: 90000 })
+  const walking = await page.evaluate(() => window.__characterAnimation())
+  if (walking.state !== 'Walk' || walking.mixerTime <= initial.mixerTime || walking.distance-initial.distance < 5) errors.push(`Walk did not advance: ${JSON.stringify(walking)}`)
+  await assertUpright('four continuous walk cycles')
+  await shot('player-walk')
+  await page.keyboard.up('KeyW')
+  await page.waitForFunction(() => window.__characterAnimation?.().state === 'Idle', null, { timeout: 30000 })
+  await page.keyboard.down('ArrowUp')
+  await page.waitForFunction((count) => window.__characterAnimation?.().walkLoops > count, walking.walkLoops, { timeout: 30000 })
+  await page.keyboard.down('ShiftLeft')
+  await page.waitForFunction(() => window.__characterAnimation?.().state === 'Run', null, { timeout: 30000 })
+  await assertUpright('running')
+  await page.keyboard.up('ShiftLeft')
+  await page.keyboard.up('ArrowUp')
+  await page.waitForFunction(() => window.__characterAnimation?.().grounded, null, { timeout: 30000 })
+  await page.keyboard.press('Space')
+  await page.waitForFunction(() => ['Jump', 'Fall'].includes(window.__characterAnimation?.().state), null, { timeout: 30000 })
+  await page.waitForFunction(() => window.__characterAnimation?.().grounded, null, { timeout: 30000 })
+  await assertUpright('after jump')
+  const final = await page.evaluate(() => window.__characterAnimation())
+  if (playerModelRequestCount !== 1) errors.push('Model was downloaded again during animation transitions')
+  console.log('Player animation result:', JSON.stringify({ initial, walking, final, modelRequests: playerModelRequestCount }))
+  await browser.close()
+  console.log(errors.length ? `PLAYER FAIL: ${errors.join('\n')}` : 'PLAYER PASS: looping, stop/resume, arrows/WASD, run, jump, upright, one model request, zero console errors')
+  process.exit(errors.length ? 1 : 0)
+}
 
 const box = await (await page.$('canvas')).boundingBox()
 const cx = box.x + box.width / 2
@@ -268,7 +303,8 @@ if (quick) {
   await assertUpright('sprinting')
   await page.keyboard.up('ShiftLeft')
   await page.keyboard.up('KeyW')
-  await wait(350)
+  await page.evaluate(() => window.__tp && window.__tp(0, 3.6, 9))
+  await wait(700)
   const readPlayerY = () => page.evaluate(() => {
     const state = window.__r3f?.getState?.() ?? window.__r3f
     const root = state?.scene?.getObjectByName?.('CharacterYawRoot')
@@ -277,10 +313,14 @@ if (quick) {
   })
   const yBeforeJump = await readPlayerY()
   await page.keyboard.press('Space')
-  await wait(250)
-  const yDuringJump = await readPlayerY()
-  if (yBeforeJump === null || yDuringJump === null || yDuringJump - yBeforeJump < 0.1) {
-    errors.push(`jump did not raise the player: ${JSON.stringify({ yBeforeJump, yDuringJump })}`)
+  const jumpSamples = []
+  for (let i = 0; i < 5; i++) {
+    await wait(120)
+    jumpSamples.push(await readPlayerY())
+  }
+  const yDuringJump = Math.max(...jumpSamples.filter((value) => value !== null))
+  if (yBeforeJump === null || !Number.isFinite(yDuringJump) || yDuringJump - yBeforeJump < 0.1) {
+    errors.push(`jump did not raise the player: ${JSON.stringify({ yBeforeJump, jumpSamples })}`)
   } else {
     console.log(`Jump controller rise: ${(yDuringJump - yBeforeJump).toFixed(2)}m`)
   }

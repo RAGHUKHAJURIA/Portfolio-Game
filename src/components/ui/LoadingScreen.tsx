@@ -213,8 +213,12 @@ export function LoadingScreen() {
             )}
           </div>
 
-          <div className="absolute bottom-5 left-0 right-0 px-6 text-center font-mono text-[9px] uppercase tracking-[0.24em] text-white/20">
-            no game assets used · everything on this island is procedurally generated
+          <div className="absolute bottom-5 left-0 right-0 px-6 text-center font-mono text-[10px] leading-relaxed text-white/60">
+            This work is based on &quot;
+            <a className="underline" href="https://sketchfab.com/3d-models/blood-raven-x-suit-a5fd847b2d3c452aa1b7d2e416c0d3d0" target="_blank" rel="noreferrer">Blood Raven X Suit</a>
+            &quot; by <a className="underline" href="https://sketchfab.com/DFLEX" target="_blank" rel="noreferrer">DFLEX</a>, licensed under{' '}
+            <a className="underline" href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC-BY-4.0</a>.
+            <br />Rigging and animation modified for this game.
           </div>
         </motion.div>
       )}

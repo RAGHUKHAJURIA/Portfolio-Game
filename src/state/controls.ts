@@ -44,6 +44,8 @@ export const playerState = {
   heading: 0,
   /** Horizontal speed, world units/sec. */
   speed: 0,
+  /** Accumulated controller displacement; excludes debug teleports and the drop. */
+  distanceTravelled: 0,
   grounded: true,
   /** 0 idle, 1 walk, 2 run */
   gait: 0 as 0 | 1 | 2,

@@ -9,6 +9,8 @@ export const CAPSULE_HALF = 0.5
 /** Distance from the rigid-body origin down to the soles. */
 export const FEET_OFFSET = CAPSULE_HALF + CAPSULE_RADIUS
 
+// Responsive exploration speed; Shift doubles it. Animation cadence follows
+// the controller's actual distance, including acceleration and collisions.
 export const WALK_SPEED = 4.2
 export const RUN_SPEED = 8.4
 

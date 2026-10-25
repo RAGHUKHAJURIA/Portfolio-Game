@@ -14,10 +14,12 @@
    - 4.2. [Procedural PBR Textures (`src/lib/textures.ts`)](#42-procedural-pbr-textures)
    - 4.3. [Synthesized Web Audio Engine (`src/lib/audio.ts`)](#43-synthesized-web-audio-engine)
    - 4.4. [Deterministic Prop Scatter (`src/lib/scatter.ts`)](#44-deterministic-prop-scatter)
-5. [Character Physics & Procedural Rigging](#5-character-physics--procedural-rigging)
+5. [Character Physics, Model Pipeline & Animation Engine](#5-character-physics-model-pipeline--animation-engine)
    - 5.1. [Kinematic Character Controller (`src/components/experience/Character.tsx`)](#51-kinematic-character-controller)
-   - 5.2. [Procedural Operator & Gait Model (`src/components/experience/CharacterModel.tsx`)](#52-procedural-operator--gait-model)
-   - 5.3. [Parachute Drop Sequence](#53-parachute-drop-sequence)
+   - 5.2. [Rigged Blood Raven X-Suit Model & Asset Pipeline (`CharacterModel.tsx`)](#52-rigged-blood-raven-x-suit-model--asset-pipeline)
+   - 5.3. [Automated Blender Rigging & Animation Baking (`scripts/rig-player-model.py`)](#53-automated-blender-rigging--animation-baking)
+   - 5.4. [Walking Animation Engine & Locomotion Mechanics](#54-walking-animation-engine--locomotion-mechanics)
+   - 5.5. [Parachute Drop Sequence & Aerial Pose States](#55-parachute-drop-sequence--aerial-pose-states)
 6. [Camera Rig & Collision Detection](#6-camera-rig--collision-detection)
    - 6.1. [Orbital Spring-Damped Follow Camera (`CameraRig.tsx`)](#61-orbital-spring-damped-follow-camera)
    - 6.2. [Boom Obstruction & Canopy Raycasting](#62-boom-obstruction--canopy-raycasting)
@@ -66,11 +68,12 @@
 
 ### Core Engineering Principles
 
-1. **100% Procedural Generation (Zero External Assets)**:
-   - **No 3D Models (.glb / .gltf / .obj)**: The island, terrain, compound architecture, character rig, foliage, rocks, weapons, and accessories are constructed from Three.js primitives and custom buffer geometries.
-   - **No Downloaded Texture Images**: Normal maps, roughness maps, dirt roads, beach gradients, and terrain coloration are synthesized in JavaScript at runtime using fractal noise lattices and vertex colors.
+1. **Procedural World & Optimized Character Pipeline**:
+   - **100% Procedural Environment**: The island terrain, compound architecture, walkable interior stairwells, foliage, rocks, weapons, and particle systems are constructed entirely from Three.js primitives and custom buffer geometries with zero downloaded environment meshes.
+   - **High-Fidelity Rigged Humanoid Operative**: The player avatar utilizes an optimized, rigged high-fidelity model (**Blood Raven X-Suit**, `/models/player/blood_raven_x_suit/scene_rigged.glb`) preloaded concurrently during initial boot. An automated Blender Python pipeline (`scripts/rig-player-model.py`) equips the mesh with an 18-bone humanoid armature, inverse-square skin weighting, and 8 procedural animation clips.
+   - **No Downloaded Texture Images for Environment**: Normal maps, roughness maps, dirt roads, beach gradients, and terrain coloration are synthesized in JavaScript at runtime using fractal noise lattices and vertex colors.
    - **No External Audio Files (.mp3 / .wav)**: Every footstep, weapon blast, UI chime, wind gust, and ambient drone is synthesized using the browser's Web Audio API.
-   - **Sub-Megabyte Core Footprint**: Without megabytes of textures or rigged animation clips, initial network transfer is strictly limited to minified application code and vendor libraries.
+   - **Resilient Fallback**: Should GLTF parsing fail, a procedural capsule avatar automatically takes over via React Error Boundary without disrupting gameplay or physics.
 
 2. **Strict Determinism**:
    - The entire world is governed by deterministic seeds (`src/lib/noise.ts`).
@@ -161,12 +164,18 @@ graph TD
 
 ```
 c:\work\3d website\
+├── models/                     # Raw player model source assets
+│   └── player/
+│       └── blood_raven_x_suit/ # Source GLTF, binary buffer, and 4K/2K PBR textures
 ├── public/                     # Static files (og.png, favicon, resume.pdf)
+│   └── models/player/blood_raven_x_suit/
+│       └── scene_rigged.glb    # Rigged 18-bone animated avatar bundle (5.16 MB)
 ├── scripts/                    # Invariant checks, smoke tests, visual regression
 │   ├── check-links.mjs         # Validates external links across portfolioData
 │   ├── diag.mjs                # Diagnostic tools
 │   ├── make-images.mjs         # Generates open-graph images and icons
-│   ├── shot-character.mjs      # Renders operator character renders
+│   ├── rig-player-model.py     # Headless Blender pipeline: armatures, skinning & animation synthesis
+│   ├── shot-character.mjs      # Fast standalone character rendering test runner
 │   ├── smoke.ts                # Asserts spatial, geometric, and content invariants
 │   ├── verify.mjs              # Boots preview server and runs headless Playwright
 │   └── visual-check.mjs        # Full automated browser walkthrough & screenshot test
@@ -178,7 +187,7 @@ c:\work\3d website\
 │   │   ├── experience/         # Everything rendered inside R3F <Canvas>
 │   │   │   ├── CameraRig.tsx   # Spring-damped third-person boom with collision
 │   │   │   ├── Character.tsx   # Rapier kinematic character controller & drop physics
-│   │   │   ├── CharacterModel.tsx # Procedural low-poly operator rig & gait engine
+│   │   │   ├── CharacterModel.tsx # Blood Raven X-Suit GLTF loader, animation state machine & chute
 │   │   │   ├── Dust.tsx        # Particle puff manager for footsteps and impacts
 │   │   │   ├── Island.tsx      # World grouping (WorldStreaming, Water, Dust, Zone)
 │   │   │   ├── Lighting.tsx    # Sun, dynamic shadow frustum, sky, and fog
@@ -364,82 +373,462 @@ Props are positioned across the island using deterministic pseudo-random distrib
 
 ---
 
-## 5. Character Physics & Procedural Rigging
+## 5. Character Physics, Model Pipeline & Animation Engine
 
 ### 5.1. Kinematic Character Controller (`src/components/experience/Character.tsx`)
 
-Movement is powered by **Rapier 3D**'s specialized kinematic character controller rather than a standard dynamic rigid body. Dynamic spheres or boxes tend to bounce on uneven terrain, stick to walls, or tip over on stairs. The kinematic controller provides tight, responsive arcade-style control:
+Player traversal is governed by **Rapier 3D**'s dedicated kinematic character controller rather than a dynamic rigid body. In 3D exploration environments, dynamic rigid bodies subject to standard Newtonian force integration present numerous gameplay hazards: bouncing unpredictably over polygonal terrain seams, clinging or sticking to vertical walls, tipping over on staircases, and suffering from sluggish input response. 
 
-- **Kinematic Capsule Dimensions**:
+The kinematic controller provides sharp, responsive, arcade-grade locomotion with direct displacement integration:
+
+```mermaid
+flowchart TD
+    WASD[Keyboard / Touch Joystick Input] --> Basis[Project into Camera Space XZ Basis]
+    Basis --> Clamp[Clamp Magnitude <= 1.0]
+    Clamp --> Accel[Blend Velocity with ACCEL or AIR_ACCEL]
+    
+    Accel --> Desired[Compute Desired Displacement: dt * V]
+    Desired --> RapierCtrl[Rapier Kinematic Character Controller: computeColliderMovement]
+    
+    RapierCtrl --> AutoStep[Auto-Step Evaluation: max 0.6m rise]
+    RapierCtrl --> SnapGround[Snap-to-Ground: max 0.7m drop]
+    RapierCtrl --> SlopeLimit[Slope Limit: climb <= 58°, slide >= 45°]
+    
+    AutoStep & SnapGround & SlopeLimit --> Corrected[Corrected Collision Translation: computedMovement]
+    Corrected --> BoundaryCheck[Island Fence & Water Edge Clamping]
+    
+    BoundaryCheck --> RigidBodyPos[RigidBody.setNextKinematicTranslation]
+    RigidBodyPos --> ActualSpeed[Compute Actual Speed = movedDist / dt]
+    ActualSpeed --> TurnSlerp[Slerp Visual Yaw toward Travel Vector]
+    ActualSpeed --> GaitState[Update playerState.speed & gait: 0 Idle, 1 Walk, 2 Run]
+    GaitState --> AnimEngine[CharacterModel Animation State Machine & Cadence Scaling]
+```
+
+#### Kinematic Capsule Geometry & Offsets
+
+- **Capsule Collider Dimensions**:
   - Radius: `CAPSULE_RADIUS = 0.42m`
-  - Half-Height: `CAPSULE_HALF = 0.54m` (Total height ~1.92m)
-- **Controller Configuration**:
-  - `enableAutostep(0.6, 0.3, true)`: Allows the character to seamlessly climb stairs and curbs up to 0.6m tall, provided the horizontal step depth is at least 0.3m.
-  - `enableSnapToGround(0.7)`: Snaps the character to descending terrain, eliminating airborne jitter when sprinting downhill.
-  - `setMaxSlopeClimbAngle(58°)`: Prevents climbing sheer cliffs while allowing access to authored hills (~15°).
-  - `setMinSlopeSlideAngle(45°)`: Induces sliding on steep rock faces.
-- **Movement Physics Loop**:
-  - Acceleration (`ACCEL = 14 m/s²`) and airborne acceleration (`AIR_ACCEL = 3.5 m/s²`).
-  - Terminal gravity (`GRAVITY = -24 m/s²`).
-  - Walk Speed (`3.6 m/s`) and Sprint Speed (`6.8 m/s`).
-  - Jump Velocity (`JUMP_V = 8.4 m/s`).
+  - Half-Height: `CAPSULE_HALF = 0.54m`
+  - Total Collider Height: $2 \times (\text{CAPSULE\_HALF} + \text{CAPSULE\_RADIUS}) = 1.92\text{m}$
+- **Visual Center & Ground Contact Offset**:
+  - The Rapier capsule's origin sits at its volumetric center ($y = 0$).
+  - The physical contact point with the ground sits at `-FEET_OFFSET = -(CAPSULE_HALF + CAPSULE_RADIUS) = -0.96m`.
+  - The visual mesh root group (`CharacterYawRoot`) is offset by `[0, -FEET_OFFSET, 0]`, aligning the bottom soles of the character's boots with the exact physical ground contact plane.
 
-### 5.2. Procedural Operator & Gait Model (`src/components/experience/CharacterModel.tsx`)
+#### Controller Configuration Parameters
 
-The player character is an articulated, procedural low-poly operative built from geometric primitives:
-
-```
-               [ Helmet / NVG Visor ]
-                         |
-                   [ Neck Pivot ]
-                         |
-           [ Shoulders / Tactical Vest / Pack ]
-             /           |                  \
-    [ Upper Arm L ]   [ Torso ]         [ Upper Arm R ]
-          |              |                    |
-    [ Forearm L ]     [ Pelvis ]         [ Forearm R ]
-          \              |                    |
-        [ Hand L ]  +----+----+          [ Hand R + Weapon ]
-                    |         |
-               [ Thigh L ] [ Thigh R ]
-                    |         |
-               [ Shin L ]  [ Shin R ]
-                    |         |
-               [ Boot L ]  [ Boot R ]
+```typescript
+const c = w.createCharacterController(0.02) // 0.02m skin offset
+c.setUp({ x: 0, y: 1, z: 0 })
+c.enableAutostep(0.6, 0.3, true)
+c.enableSnapToGround(0.7)
+c.setMaxSlopeClimbAngle((58 * Math.PI) / 180)
+c.setMinSlopeSlideAngle((45 * Math.PI) / 180)
+c.setApplyImpulsesToDynamicBodies(true)
+c.setCharacterMass(75)
+c.setSlideEnabled(true)
 ```
 
-1. **Heroic-Realistic Proportions**:
-   - Modelled at 7 heads tall (1.82m) with distinct tactical equipment: ballistic helmet, night-vision goggle mount, plate carrier vest, shoulder pads, modular backpack, and combat boots.
-2. **Two-Segment Articulated Limbs**:
-   - Legs have separate `thigh` and `shin` groups with real knee joints (`kneeL`, `kneeR`).
-   - Arms have separate `upperArm` and `forearm` groups with real elbow joints (`elbowL`, `elbowR`).
-3. **Dynamic Gait Generator**:
-   - Driven entirely by instantaneous horizontal speed:
-     $$\text{frequency} = \text{speed} \times 0.95, \quad \theta = \sin(\text{phase})$$
-   - Hips sway laterally and bob vertically with step impacts.
-   - Thighs swing opposite each other while knees flex positively during the forward swing phase.
-   - Arms counter-swing the legs to maintain physical balance.
-4. **Foot Ground Planting**:
-   - During walking and idle, the model samples `terrainHeight` beneath both left and right feet independently.
-   - Stance adjusts vertically up to `MAX_FOOT_DROP = 0.4m` so the character stands naturally on uneven slopes rather than floating in mid-air.
-5. **Head Tracking & Look-At**:
-   - The neck and head smoothly rotate to follow the camera's orbital yaw and pitch (`MAX_HEAD_TURN = 0.7 rad`), making the character look toward whatever the player is observing.
+1. **Auto-Stepping (`enableAutostep(0.6, 0.3, true)`)**:
+   - Allows the character to seamlessly climb curbs, porch foundations, and interior stair risers up to **0.6m high**, provided the horizontal surface is at least **0.3m deep**.
+   - Enables natural ascent of the 12-step interior stairwells without requiring manual jump inputs.
+2. **Ground Snapping (`enableSnapToGround(0.7)`)**:
+   - Evaluates a vertical downward sweep of **0.7m** when grounded.
+   - Glues the character capsule to descending topography, eliminating airborne jitter when sprinting downhill.
+3. **Slope Thresholds**:
+   - `setMaxSlopeClimbAngle(58°)`: Grants free exploration of authored rolling hills (~15° slope) while preventing players from walking up steep mountain ridgelines or sheer cliff faces.
+   - `setMinSlopeSlideAngle(45°)`: Induces downward sliding when standing on acute terrain inclines.
+4. **Dynamic Mass & Impulses (`setCharacterMass(75)`)**:
+   - Configures the operative with a physical mass of 75kg.
+   - When the kinematic capsule collides with dynamic objects (such as target stands, fuel barrels, or wooden debris at the shooting range), Rapier transfers realistic impulse forces, scattering clutter naturally.
 
-### 5.3. Parachute Drop Sequence
+#### Kinematic Velocity Integration & Boundary Containment
 
-When the visitor clicks **DROP IN**, the app initiates a battle-royale aerial drop:
+- **Locomotion Kinematics**:
+  - Horizontal Acceleration: `ACCEL = 14 m/s²` on ground; `AIR_ACCEL = 3.5 m/s²` in air.
+  - Velocities: `WALK_SPEED = 3.6 m/s` (~13.0 km/h), `RUN_SPEED = 6.8 m/s` (~24.5 km/h).
+  - Gravity & Jump: `GRAVITY = -24 m/s²`, `JUMP_V = 8.4 m/s`, terminal falling velocity clamped to `-45 m/s`.
+  - Jump input behaves as a rising-edge trigger: consumed immediately upon execution to prevent queued jumps on landing.
+- **Island Boundary Clamping**:
+  - A circular fence boundary is enforced at `ISLAND.boundary = 148m`.
+  - If horizontal radius $r = \sqrt{x^2 + z^2} > \text{boundary}$, the position is projected radially inward ($x \times \frac{\text{boundary}}{r}$), causing the player to slide smoothly along the outer perimeter.
+- **Water Exclusion & Shoreline Sliding**:
+  - The shoreline inlet penetrates inside the circular boundary. To prevent the camera and character from being submerged beneath the opaque sea plane, `isSubmerged(x, z)` tests ground elevation against `seaLevel = -1.2m`.
+  - When water penetration is detected, the controller retries each coordinate axis independently ($x$ then $z$). This enables the operative to slide fluidly along the water's edge rather than sticking abruptly to the shoreline.
+- **Under-World Safety Net**:
+  - If an extreme frame drop or collision anomaly pushes $y$ below `terrainHeight(x, z) + FEET_OFFSET - 0.15m`, the character is instantly clamped to the surface and vertical velocity is reset to zero.
 
-1. **Freefall Phase**:
-   - Spawns at altitude `DROP_FROM = [0, 82, 38]`.
-   - Character assumes a skydiver arch pose with arms and legs spread.
-   - Wind noise reaches peak intensity; camera trails high above.
-2. **Canopy Deployment**:
-   - At `CHUTE_ALTITUDE = 34m`, a tactical rectangular ram-air parachute unfolds procedurally above the operator.
-   - Velocity transitions smoothly to descent glide speed (`CHUTE_SPEED = 7.5 m/s`).
-   - Operator shifts to a harness suspension pose, hands grasping the parachute risers.
-3. **Touchdown**:
-   - Character touches down at the center plaza `DROP_TO = [0, 2.2, 6]`.
-   - Parachute collapses and fades; landing sound triggers; camera transitions to gameplay follow distance (`8.5m`); player gains movement control.
+---
+
+### 5.2. Rigged Blood Raven X-Suit Model & Asset Pipeline (`CharacterModel.tsx`)
+
+The player character is rendered using an optimized, battle-tested 3D sci-fi operative model: the **Blood Raven X-Suit** (`/models/player/blood_raven_x_suit/scene_rigged.glb`). The asset features carbon-fiber reinforced exosuit plating, tactical pouches, a high-altitude jump pack, reinforced combat boots, and HUD-linked combat optics.
+
+```
+c:\work\3d website\public\models\player\blood_raven_x_suit\
+├── license.txt                 # CC-BY Attribution & asset origin metadata
+├── scene.gltf                  # Original raw GLTF 2.0 unskinned mesh hierarchy
+├── scene.bin                   # Binary vertex buffer data (1.15 MB)
+├── textures/                   # 4K & 2K PBR material maps
+│   ├── mat0_baseColor.png
+│   ├── mat0.002_baseColor.png ... mat0.006_baseColor.png
+│   └── mat0.006_metallicRoughness.png
+└── scene_rigged.glb            # Headless Blender export: Armature + Skinned Mesh + 8 Actions (5.16 MB)
+```
+
+#### Preloading & Cache Architecture
+
+To achieve zero visual pop-in when the visitor transitions from the loading terminal to the 3D scene:
+
+```typescript
+const PLAYER_MODEL_URL = '/models/player/blood_raven_x_suit/scene_rigged.glb'
+
+// Initiates background fetch while loading screen is visible
+useGLTF.preload(PLAYER_MODEL_URL)
+```
+
+- `useGLTF` and `useGLTF.preload` share `@react-three/drei`'s global `useLoader` cache.
+- The 5.16 MB GLB asset is requested **exactly once** during the initial boot sequence (strictly asserted by the headless verification test `scripts/visual-check.mjs`).
+- Subsequent component remounts or hot-reloads retrieve the decoded skeleton, materials, and textures directly from memory without network overhead.
+
+#### Dynamic Bounding Box Normalization & Ground Contact Alignment
+
+Imported 3D assets authored in external software (such as Blender, Maya, or 3ds Max) often exhibit arbitrary bounding scales, coordinate axes, and origin placements. Rather than relying on fragile manual guesswork, `CharacterModel.tsx` runs an automated calibration pass inside a `useMemo` hook:
+
+```typescript
+const calibration = useMemo<Calibration>(() => {
+  scene.updateMatrixWorld(true)
+  scene.traverse((object) => {
+    if ('isMesh' in object && object.isMesh) {
+      object.castShadow = true
+      object.receiveShadow = true
+    }
+  })
+
+  const bounds = new Box3().setFromObject(scene)
+  const size = bounds.getSize(new Vector3())
+  const scale = PLAYER_HEIGHT / Math.max(size.y, 0.001)
+  return { scale, yOffset: -bounds.min.y * scale }
+}, [scene])
+```
+
+1. **Shadow Frustum Integration**:
+   - Recursively traverses all sub-meshes to flag `castShadow = true` and `receiveShadow = true`.
+   - Projects crisp dynamic contact shadows onto the terrain, building floors, and exterior ramps.
+2. **Uniform Height Scaling**:
+   - Measures raw mesh height via `Box3.getSize().y` (Blender source measures 190.7 units).
+   - Computes uniform scale factor:
+     $$\text{scale} = \frac{\text{PLAYER\_HEIGHT}}{\max(\text{size.y}, 0.001)} = \frac{1.85}{190.7} \approx 0.009701$$
+   - Normalizes the character to an exact tactical height of **1.85 meters**.
+3. **Sole-to-Capsule Ground Alignment**:
+   - Finds the absolute lowest vertex in the model: `bounds.min.y`.
+   - Computes vertical offset: `yOffset = -bounds.min.y * scale`.
+   - Translates the mesh so the soles of the combat boots sit precisely at $y = 0$ in the visual group's coordinate frame, matching Rapier's `-FEET_OFFSET`.
+4. **Coordinate System Orientation Reconciliation**:
+   - Blender's default forward orientation is $+Y$ (Z-up), whereas Three.js / R3F camera forward is $-Z$ (Y-up).
+   - `MODEL_YAW_OFFSET = Math.PI` (180° rotation) is applied strictly at the visual wrapper root (`PlayerModelCorrectionRoot`):
+     ```tsx
+     <group name="PlayerModelCorrectionRoot" rotation={[0, MODEL_YAW_OFFSET, 0]}>
+       <group name="BloodRavenVisual" scale={calibration.scale} position={[0, calibration.yOffset, 0]}>
+         <primitive object={scene} dispose={null} />
+       </group>
+     </group>
+     ```
+   - This fixed geometric correction is entirely decoupled from the runtime directional yaw calculated by `Character.tsx`, preventing coordinate inversion bugs.
+
+#### Resilient React Error Boundary (`PlayerModelErrorBoundary`)
+
+If a visitor experiences network corruption, restrictive CDN firewalls, or out-of-memory errors while loading the GLB model, the application does not crash. `PlayerModelErrorBoundary` intercepts the exception and mounts a procedural fallback capsule:
+
+```tsx
+<mesh name="PlayerModelFallback" position={[0, 0.9, 0]} castShadow>
+  <capsuleGeometry args={[0.32, 1.15, 4, 8]} />
+  <meshStandardMaterial color="#f0a92e" roughness={0.8} />
+</mesh>
+```
+
+The Rapier physics controller, camera boom, interaction triggers, HUD altimeter, and minimap continue running uninterrupted.
+
+---
+
+### 5.3. Automated Blender Rigging & Animation Baking (`scripts/rig-player-model.py`)
+
+The source asset (`scene.gltf`) was an unskinned static mesh without skeletal hierarchy or animation tracks. To produce a fully functional game character, the repository includes a custom, headless **Blender Python automation pipeline** (`scripts/rig-player-model.py`).
+
+```mermaid
+graph LR
+    GLTF[Source: scene.gltf & scene.bin] --> Blender[Headless Blender Automation]
+    Blender --> Armature[Build 18-Bone Humanoid Armature]
+    Blender --> Skinning[Inverse-Square Geometric Skin Weighting]
+    Blender --> Actions[Synthesize 8 Procedural Animation Actions]
+    Actions --> Export[GLTF Exporter: ACTIONS & SKINS]
+    Export --> GLB[public/.../scene_rigged.glb: 5.16 MB]
+```
+
+#### 18-Bone Humanoid Armature (`BloodRaven_Rig`)
+
+The script constructs an articulated humanoid skeleton scaled to the character's geometry:
+
+| Bone Name | Head Position $[X, Y, Z]$ | Tail Position $[X, Y, Z]$ | Parent Bone | Deform |
+|---|---|---|---|---|
+| `Root` | $[0, 0, 0]$ | $[0, 0, 92]$ | *None* | `false` |
+| `Hips` | $[0, 0, 91]$ | $[0, 0, 111]$ | `Root` | `true` |
+| `Spine` | $[0, 0, 105]$ | $[0, 0, 137]$ | `Hips` | `true` |
+| `Chest` | $[0, 0, 137]$ | $[0, 0, 153]$ | `Spine` | `true` |
+| `Neck` | $[0, 0, 153]$ | $[0, 0, 165]$ | `Chest` | `true` |
+| `Head` | $[0, 0, 163]$ | $[0, 0, 181]$ | `Neck` | `true` |
+| `LeftUpperLeg` / `RightUpperLeg` | $[\mp 12, 0, 101]$ | $[\mp 15, 0, 57]$ | `Hips` | `true` |
+| `LeftLowerLeg` / `RightLowerLeg` | $[\mp 15, 0, 57]$ | $[\mp 14, 0, 16]$ | `UpperLeg` | `true` |
+| `LeftFoot` / `RightFoot` | $[\mp 14, 0, 16]$ | $[\mp 14, 12, 7]$ | `LowerLeg` | `true` |
+| `LeftToe` / `RightToe` | $[\mp 14, 12, 7]$ | $[\mp 14, 21, 6]$ | `Foot` | `true` |
+| `LeftUpperArm` / `RightUpperArm` | $[\mp 18, 0, 147]$ | $[\mp 34, 0, 126]$ | `Chest` | `true` |
+| `LeftLowerArm` / `RightLowerArm` | $[\mp 34, 0, 126]$ | $[\mp 32, 2, 105]$ | `UpperArm` | `true` |
+| `LeftHand` / `RightHand` | $[\mp 32, 2, 105]$ | $[\mp 31, 7, 97]$ | `LowerArm` | `true` |
+
+All bone rolls are aligned to the positive X-axis (`align_roll(Vector((1, 0, 0)))`), establishing standardized local rotation axes across symmetrical limbs.
+
+#### Inverse-Square Geometric Skin Weighting Engine
+
+Rather than relying on manual weight painting or naive heat-map diffusion (which often fails on disconnected clothing shells and armor panels), the pipeline computes skin weights using **point-to-segment geometric projection**:
+
+1. **Point-to-Segment Euclidean Distance (`point_segment_distance`)**:
+   For every vertex $P$ in the mesh and bone line segment $AB$:
+   $$t = \text{clamp}\left(\frac{(P - A) \cdot (B - A)}{\|B - A\|^2}, 0, 1\right), \quad d(P, AB) = \|P - (A + t(B - A))\|$$
+2. **Inverse-Square Falloff**:
+   Calculates influence across the 3 nearest candidate bones:
+   $$w_i = \frac{1}{\max(d_i, 1.5)^2}, \quad \hat{w}_i = \frac{w_i}{\sum_{j=1}^3 w_j}$$
+   This produces smooth, non-pinching joint deformations at the knees, elbows, and hips, while ensuring disconnected armor plates stay bound to their underlying limbs.
+3. **Partitioned Mesh Binding**:
+   - **`Top*` (Upper Gear)**: Weighted against upper chain (`Hips`, `Spine`, `Chest`, `Neck`, `Head`, arms, hands).
+   - **`Pant*` (Trousers & Boots)**: Weighted against lower chain (`Hips`, legs, feet, toes).
+   - **`HEAD*` / `Mask*`**: 100% rigid-bound (`weight = 1.0`) to `Head` bone to prevent optical distortion of the visor.
+   - **`Bag*` (Tactical Jump Pack)**: 100% rigid-bound to `Chest` bone.
+   - **Holsters & Pouches**: 100% rigid-bound to `Spine`.
+
+#### Synthesized Animation Clips Catalog
+
+Eight distinct animation actions are mathematically baked into the GLB bundle:
+
+| Action Name | Frame Length | Looping Mode | Description |
+|---|---|---|---|
+| **`Idle`** | 48 frames (2.0s) | `LoopRepeat` | Natural breathing sway, subtle spine torsion ($0.012\sin$), hips vertical cycle |
+| **`Walk`** | 24 frames (1.0s) | `LoopRepeat` | Tactical cadence, 1.55m authored travel, reciprocal arm/leg swings, pelvic bob |
+| **`Run`** | 24 frames (1.0s) | `LoopRepeat` | Extended forward stride, 3.2m authored travel, deep knee drive, aggressive lean |
+| **`Jump`** | 18 frames (0.75s) | `LoopOnce` | Crouch anticipation, upward ballistic extension, arm lift |
+| **`Fall`** | 12 frames (0.5s) | `LoopRepeat` | Airborne stabilization pose, leg splay, outward arm balance |
+| **`Land`** | 13 frames (0.54s) | `LoopOnce` | Impact compression, knee flexion, torso forward flexion, hip dampening |
+| **`Freefall`** | 12 frames (0.5s) | `LoopRepeat` | High-altitude belly-to-earth skydiver arch, arms swept, legs extended |
+| **`Parachute`** | 12 frames (0.5s) | `LoopRepeat` | Vertical harness suspension pose, hands reaching upward holding risers |
+
+All keyframes use Bézier curves with auto-clamped tangent handles (`AUTO_CLAMPED`) to guarantee smooth derivative acceleration across cycles.
+
+---
+
+### 5.4. Walking Animation Engine & Locomotion Mechanics
+
+The walking animation system bridges Rapier's physical simulation and Three.js's skeletal animation. It ensures that the visual operative never slides, floats, or cycles their feet into walls.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Phys as Rapier Kinematic Controller
+    participant State as playerState (controls.ts)
+    participant Model as CharacterModel (ImportedPlayer)
+    participant Actions as THREE.AnimationAction (useAnimations)
+    participant Audio as Synthesized Audio (audio.ts)
+
+    Phys->>State: Calculate actual displacement: movedX = nx - x, movedZ = nz - z
+    Phys->>State: Update playerState.speed = hypot(movedX, movedZ) / dt
+    Phys->>State: Update playerState.gait = speed < 0.35 ? 0 : (speed < 4.8 ? 1 : 2)
+    
+    Model->>Model: Evaluate State Machine Priority: Dropping > Airborne > Land > Walk/Run/Idle
+    Model->>Actions: Cross-fade to 'Walk' (fadeIn 0.18s, fadeOut previous 0.18s)
+    
+    Note over Model,Actions: Cadence Scaling: Eliminate Foot Sliding
+    Model->>Actions: setEffectiveTimeScale(playerState.speed / 1.55)
+    
+    Phys->>Phys: Integrate Stride: stepAccum += speed * dt
+    alt stepAccum > 1.35m (Walk) or 2.0m (Run)
+        Phys->>Audio: playFootstep(isSprinting) -> Bandpass noise burst (680Hz / 820Hz)
+        Phys->>Phys: spawnDust(footX, footY, footZ) -> Particle puff
+        Phys->>Phys: Reset stepAccum = 0
+    end
+```
+
+#### Harmonic Walk Cycle Formulation
+
+The walking cycle (`gait_pose` in `scripts/rig-player-model.py`) is synthesized using harmonic biomechanical equations evaluated over a normalized phase angle $\phi \in [0, 2\pi]$:
+
+$$\phi = \frac{\text{frame} - 1}{24} \times 2\pi$$
+
+```python
+phase = (frame - 1) / 24 * math.tau
+swing = math.sin(phase)
+cosine = math.cos(phase)
+```
+
+1. **Hip Swing (Upper Legs)**:
+   $$\theta_{\text{hip\_left}} = \text{hip\_amp} \times \sin(\phi), \quad \theta_{\text{hip\_right}} = -\text{hip\_amp} \times \sin(\phi)$$
+   The left and right thighs oscillate in perfect opposition. For the walk cycle, $\text{hip\_amp} = 0.45\text{ rad}$ (~25.8°); for the run cycle, $\text{hip\_amp} = 0.78\text{ rad}$ (~44.7°).
+2. **Knee Flexion (Lower Legs)**:
+   $$\theta_{\text{knee\_left}} = -\text{knee\_amp} \times \max(0, \cos(\phi)), \quad \theta_{\text{knee\_right}} = -\text{knee\_amp} \times \max(0, -\cos(\phi))$$
+   **Non-Linear Biomechanical Clamp**: Real human knees flex backward during the forward swing phase to allow foot ground clearance, but lock straight during the weight-bearing stance phase. The half-wave rectification $\max(0, \pm\cos(\phi))$ guarantees that:
+   - When the thigh swings forward, the knee flexes smoothly up to $\text{knee\_amp} = 0.8\text{ rad}$ (~45.8°).
+   - When the foot is planted on the ground carrying the body's weight, the knee rotation is strictly $0\text{ rad}$, preventing backward hyperextension.
+3. **Ankle & Foot Articulation**:
+   $$\theta_{\text{foot\_left}} = \text{knee\_amp} \times \max(0, \cos(\phi)) \times 0.18, \quad \theta_{\text{foot\_right}} = \text{knee\_amp} \times \max(0, -\cos(\phi)) \times 0.18$$
+   Slight upward pitch (dorsiflexion) during the swing phase ensures toe clearance above terrain micro-bumps.
+4. **Counter-Arm Swing & Elbow Flexion**:
+   $$\theta_{\text{arm\_left}} = -\text{arm\_amp} \times \sin(\phi), \quad \theta_{\text{arm\_right}} = \text{arm\_amp} \times \sin(\phi)$$
+   $$\theta_{\text{elbow\_left}} = -\text{elbow\_amp} \times 0.6 \times (0.5 - 0.5\sin(\phi))$$
+   Arms oscillate opposite their corresponding legs to counterbalance angular momentum. The elbows remain bent at a tactical low-ready readiness angle throughout traversal.
+5. **Pelvic Twist & Dual-Crest Vertical Bobbing**:
+   $$\text{twist}_{\text{hips}} = \text{twist\_amp} \times \sin(\phi)$$
+   $$\Delta z_{\text{hips}} = \text{bob\_amp} \times \cos(2\phi)$$
+   - The pelvis twists slightly along the vertical axis ($\text{twist\_amp} = 0.05\text{ rad}$), tracking leg extension.
+   - Pelvic vertical bobbing operates at **double the stride frequency ($2\phi$)**: the hips rise to their apex during mid-stance (when standing on one straightened leg) and drop to their lowest nadir during double-support impact (when both feet touch the ground).
+
+#### Gait Comparison: Walk vs. Run Parameters
+
+| Metric / Joint Parameter | Walk Action (`Walk`) | Run Action (`Run`) | Biomechanical Purpose |
+|---|---|---|---|
+| **Authored Displacement** | `1.55m` per loop | `3.20m` per loop | Calibrates foot travel to real world units |
+| **Hip Swing Amplitude (`hip_amp`)** | `0.45 rad` (~25.8°) | `0.78 rad` (~44.7°) | Wider forward/backward leg travel |
+| **Knee Flexion (`knee_amp`)** | `0.80 rad` (~45.8°) | `0.72 rad` (~41.2°) | Dynamic heel kick during recovery |
+| **Arm Swing Amplitude (`arm_amp`)** | `0.35 rad` (~20.0°) | `0.55 rad` (~31.5°) | Greater counter-balance momentum |
+| **Elbow Flexion (`elbow_amp`)** | `0.50 rad` | `0.50 rad` | Tactical weapon-ready arm posture |
+| **Pelvic Vertical Bob (`bob_amp`)** | `3.0 cm` | `1.8 cm` | Center of mass oscillation |
+| **Pelvic Twist (`twist_amp`)** | `0.05 rad` (~2.9°) | `0.07 rad` (~4.0°) | Hip yaw rotation into stride |
+| **Spine Counter-Twist** | `0.025 rad` ($\sin 2\phi$) | `0.025 rad` ($\sin 2\phi$) | Decouples torso aim from hip sway |
+
+#### Real-Time Locomotion State Machine
+
+Every frame in `useFrame`, `CharacterModel.tsx` evaluates input flags, velocity vectors, and physics states:
+
+```typescript
+let state: string
+if (dropping) {
+  state = playerState.y < CHUTE_ALTITUDE ? 'Parachute' : 'Freefall'
+} else if (!playerState.grounded) {
+  state = playerState.verticalVelocity > 0.45 ? 'Jump' : 'Fall'
+} else if (performance.now() - playerState.landedAt < 420 && playerState.landedAt > 0) {
+  state = 'Land'
+} else {
+  state = playerState.speed > 0.35
+    ? (playerState.gait === 2 ? 'Run' : 'Walk')
+    : 'Idle'
+}
+```
+
+- **Priority Hierarchy**:
+  1. `dropping`: Chute deployment ($y < 34\text{m}$) vs Freefall.
+  2. `!grounded`: Jump ($V_y > 0.45\text{ m/s}$) vs Airborne Fall ($V_y \le 0.45\text{ m/s}$).
+  3. `Land`: Plays impact absorption clip for **420ms** immediately following touchdown.
+  4. `grounded`: Idle ($\text{speed} \le 0.35\text{ m/s}$), Walk ($0.35 < \text{speed} \le 4.8\text{ m/s}$), or Run ($\text{speed} > 4.8\text{ m/s}$ / `sprint` active).
+
+#### Animation Cross-Fading & Loop Policies
+
+When transitioning between states (e.g. from `Idle` into `Walk`):
+
+```typescript
+const looping = ['Idle', 'Fall', 'Freefall', 'Parachute'].includes(state)
+next.reset()
+next.enabled = true
+next.setLoop(looping ? LoopRepeat : LoopOnce, looping ? Infinity : 1)
+next.clampWhenFinished = !looping
+next.setEffectiveWeight(1)
+next.setEffectiveTimeScale(1)
+next.fadeIn(0.18).play()
+activeAction.current?.fadeOut(0.18)
+activeAction.current = next
+activeState.current = state
+```
+
+- **Smooth 180ms Blend**: `fadeIn(0.18)` and `fadeOut(0.18)` smoothly interpolate skeletal bone quaternions, eliminating sudden pop artifacts.
+- **Looping vs Clamping**:
+  - Continuous states (`Idle`, `Fall`, `Freefall`, `Parachute`, `Walk`, `Run`) loop seamlessly (`LoopRepeat`).
+  - Transient impulses (`Jump`, `Land`) play once (`LoopOnce`) and hold their final pose (`clampWhenFinished = true`) until the state machine transitions out.
+
+#### Foot-Sliding Elimination & Cadence Scaling
+
+A pervasive problem in 3D web character controllers is **foot sliding** (skating), which occurs when a character moves through the world at a speed that does not match the playback speed of their walking animation. Furthermore, if a player walks into a wall, standard input-driven systems continue to play the walk animation while the character remains stationary.
+
+Drop Zone eliminates this through a two-tiered architectural coupling:
+
+1. **Rapier Kinematic Displacement as Truth**:
+   In `Character.tsx`, `playerState.speed` is calculated from **actual displacement**, not desired velocity:
+   ```typescript
+   const movedX = nx - pos.x
+   const movedZ = nz - pos.z
+   const speed = Math.hypot(movedX, movedZ) / Math.max(dt, 1e-4)
+   playerState.speed = speed
+   ```
+   If the character runs against a solid concrete building wall or steep boulder, Rapier's `computeColliderMovement` stops forward progress ($nx = \text{pos.x}, nz = \text{pos.z}$). Consequently, `playerState.speed` immediately drops to $0.0\text{ m/s}$.
+2. **Dynamic Cadence Matching**:
+   In `CharacterModel.tsx`, the animation playback time scale is dynamically modulated to match actual horizontal speed against the authored stride length:
+   ```typescript
+   if (state === 'Walk') activeAction.current?.setEffectiveTimeScale(playerState.speed / 1.55)
+   else if (state === 'Run') activeAction.current?.setEffectiveTimeScale(playerState.speed / 3.2)
+   ```
+   - At normal walk speed ($3.6\text{ m/s}$), the animation plays at $\frac{3.6}{1.55} \approx 2.32\times$ speed.
+   - On a slow mobile joystick push ($1.55\text{ m/s}$), the animation plays at exactly $1.0\times$ speed.
+   - When blocked by a wall or obstacle, `speed` falls below $0.35\text{ m/s}$, bringing the walk animation to a complete halt and triggering a clean 180ms cross-fade back to `Idle`!
+
+#### Acoustic & Visual Step Synchronization
+
+Footstep audio and dust emissions are driven by **distance travelled**, rather than elapsed time, ensuring that footsteps stay in lockstep with the visual gait:
+
+- **Distance Accumulator**: `stepAccum.current += speed * dt`
+- **Stride Distance Thresholds**:
+  - Walk Stride: `1.35 meters`
+  - Run Stride: `2.00 meters`
+- **Synchronized Feedback**:
+  When `stepAccum > stride`:
+  - Triggers `playFootstep(gait === 2)`: synthesizes an acoustic 45ms bandpassed noise burst alternating between 680Hz and 820Hz to simulate left/right boot impacts on packed soil.
+  - Calls `spawnDust(nx, ny - FEET_OFFSET, nz, intensity)`: emits a burst of billboard dust particles at the operative's heels ($1.1\times$ radius on sprint, $0.6\times$ on walk).
+  - Resets `stepAccum = 0`.
+
+---
+
+### 5.5. Parachute Drop Sequence & Aerial Pose States
+
+Clicking **DROP IN** initiates a battle-royale aerial insertion:
+
+```
+[ DROP_FROM: (0, 82, 38) ]
+           |
+           |  FREEFALL STATE (Terminal: -18 m/s, Skydiver Arch Pose)
+           v
+[ CHUTE_ALTITUDE: 34m ]
+           |
+           |  PARACHUTE STATE (Descent: -7.5 m/s, Harness Grip Pose)
+           v
+[ DROP_TO: (0, 2.2, 6) ] ===> TOUCHDOWN (Land Pose, Dust Cloud, Audio Thud)
+```
+
+1. **Freefall State (`Freefall`)**:
+   - Player teleports to altitude `DROP_FROM = [0, 82, 38]`.
+   - Rapid descent toward terminal velocity `FREEFALL_TERMINAL = -18 m/s`.
+   - Operative assumes the `Freefall` action pose: belly-to-earth skydiver arch with arms and legs spread wide.
+   - Camera pulls back to a wide hero perspective (`distance = 15m`, `pitch = 0.42 rad`).
+2. **Canopy Deployment (`Parachute`)**:
+   - At `CHUTE_ALTITUDE = 34m`, descent velocity eases toward `CHUTE_SPEED = -7.5 m/s`.
+   - The operative cross-fades into the `Parachute` pose: hands raised grasping the overhead suspension risers.
+   - The procedural **`Parachute`** component unfolds above the player ($y = +4.6\text{m}$):
+     - Dual-hemisphere aerodynamic canopy: outer tactical orange dome (`#e8623c`), inner white liner (`#f2f2ef`).
+     - 4 angled suspension lines connecting canopy corners to the harness.
+     - Dynamic harmonic roll and pitch sway:
+       $$\text{rot}_z = \sin(t \times 0.0022) \times 0.07, \quad \text{rot}_x = \cos(t \times 0.0019) \times 0.05$$
+     - Smooth opening expansion: scale ramps from 0.25 to 1.0 via cubic Hermite easing.
+3. **Touchdown & Control Transfer**:
+   - Altitude reaches `terrainHeight(x, z) + FEET_OFFSET` at `DROP_TO = [0, 2.2, 6]`.
+   - Safety Watchdog: A wall-clock timeout (`MAX_DROP_SECONDS = 9s`) guarantees touchdown even under low headless framerates.
+   - On landing:
+     - The parachute canopy collapses and unmounts (`visible = false`).
+     - Triggers heavy impact audio `playLand()` and an expanded ground dust puff (`radius = 2.4m`).
+     - Sets `playerState.landedAt = performance.now()`, locking the `Land` animation for 420ms.
+     - Camera boom eases smoothly into the standard third-person play distance (`PLAY_DISTANCE = 8.5m`).
+     - Game phase switches to `'playing'`, unlocking movement controls.
 
 ---
 
@@ -889,5 +1278,5 @@ Procedural worlds can break easily if numerical constants are modified. `smoke.t
 | **Run Full E2E Verification** | `npm run verify` (Builds, checks links, and runs Playwright walkthrough) |
 | **Update Portfolio Content** | Edit `src/data/portfolioData.ts` (All text, projects, skills, links) |
 | **Relocate / Add Buildings** | Modify `HOUSE_DEFS` in `src/data/portfolioData.ts`, then run `npm run check` |
-| **Replace Character Model** | Place rigged model at `public/models/operator.glb` and bind in `CharacterModel.tsx` |
+| **Character Model & Rigs** | Run `python scripts/rig-player-model.py` to re-rig/bake `public/models/player/.../scene_rigged.glb` |
 | **Deploy to Production** | `npx vercel --prod` or push to repository `main` branch |

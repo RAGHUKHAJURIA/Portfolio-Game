@@ -338,6 +338,7 @@ export function Character() {
     const movedX = nx - pos.x
     const movedZ = nz - pos.z
     const speed = Math.hypot(movedX, movedZ) / Math.max(dt, 1e-4)
+    playerState.distanceTravelled += Math.hypot(movedX, movedZ)
 
     // Face the direction of travel.
     if (intent > 0.05 && speed > 0.25) {

@@ -1,17 +1,17 @@
-import { Component, useMemo, useRef, type ReactNode } from 'react'
+import { Component, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { useAnimations, useGLTF } from '@react-three/drei'
-import { Bone, Box3, LoopOnce, LoopRepeat, Vector3 } from 'three'
+import { useGLTF } from '@react-three/drei'
+import { AnimationMixer, Box3, LoopOnce, LoopRepeat, Vector3 } from 'three'
 import type { AnimationAction } from 'three'
 import type { ErrorInfo } from 'react'
 import type { Group } from 'three'
 import { CHUTE_ALTITUDE } from '../../lib/constants'
 import { playerState } from '../../state/controls'
 
-const PLAYER_MODEL_URL = '/models/player/blood_raven_x_suit/scene_rigged.glb'
+const PLAYER_MODEL_URL = '/models/player/blood_raven_x_suit/walk.glb'
 const PLAYER_HEIGHT = 1.85
 
-// This fixed correction is isolated from the runtime yaw controlled by Character.tsx.
+// Blender +Y forward exports to glTF -Z. The controller's heading zero is +Z.
 const MODEL_YAW_OFFSET = Math.PI
 
 // Start fetching while the existing loading screen is visible. useGLTF and
@@ -19,33 +19,46 @@ const MODEL_YAW_OFFSET = Math.PI
 useGLTF.preload(PLAYER_MODEL_URL)
 
 type Calibration = { scale: number; yOffset: number }
-type BonePose = { bone: Bone; x: number; y: number; z: number }
-
-function resolveBone(scene: Group, name: string): BonePose | undefined {
-  const bone = scene.getObjectByName(name)
-  if (!(bone instanceof Bone)) return undefined
-  return { bone, x: bone.rotation.x, y: bone.rotation.y, z: bone.rotation.z }
-}
 
 function ImportedPlayer({ dropping }: { dropping: boolean }) {
   const { scene, animations } = useGLTF(PLAYER_MODEL_URL)
-  const { actions } = useAnimations(animations, scene)
+  const mixer = useMemo(() => new AnimationMixer(scene), [scene])
+  const actions = useMemo(() => Object.fromEntries(
+    animations.map((clip) => [clip.name, mixer.clipAction(clip)]),
+  ), [animations, mixer])
   const activeState = useRef<string | null>(null)
   const activeAction = useRef<AnimationAction | null>(null)
-  const gaitPhase = useRef(0)
-  const gaitWeight = useRef(0)
-  const rig = useMemo(() => ({
-    leftThigh: resolveBone(scene, 'LeftUpperLeg'),
-    rightThigh: resolveBone(scene, 'RightUpperLeg'),
-    leftKnee: resolveBone(scene, 'LeftLowerLeg'),
-    rightKnee: resolveBone(scene, 'RightLowerLeg'),
-    leftFoot: resolveBone(scene, 'LeftFoot'),
-    rightFoot: resolveBone(scene, 'RightFoot'),
-    leftArm: resolveBone(scene, 'LeftUpperArm'),
-    rightArm: resolveBone(scene, 'RightUpperArm'),
-    leftElbow: resolveBone(scene, 'LeftLowerArm'),
-    rightElbow: resolveBone(scene, 'RightLowerArm'),
-  }), [scene])
+  const lastDistance = useRef(playerState.distanceTravelled)
+  const walkLoops = useRef(0)
+  const strides = useMemo(() => {
+    const data = scene.getObjectByName('BloodRaven_Rig')?.userData
+    return { walk: Number(data?.walkStride) || 1.55, run: Number(data?.runStride) || 3.2 }
+  }, [scene])
+
+  useEffect(() => {
+    const onLoop = (event: { action: AnimationAction }) => {
+      if (event.action === actions.Walk) walkLoops.current++
+    }
+    mixer.addEventListener('loop', onLoop)
+    const debugWindow = window as typeof window & { __characterAnimation?: () => unknown }
+    if (new URLSearchParams(location.search).has('debug')) {
+      debugWindow.__characterAnimation = () => ({
+        state: activeState.current, mixerTime: mixer.time,
+        actionTime: activeAction.current?.time, walkLoops: walkLoops.current,
+        speed: playerState.speed, grounded: playerState.grounded,
+        distance: playerState.distanceTravelled,
+        clips: animations.map((clip) => ({ name: clip.name, duration: clip.duration })),
+      })
+    }
+    return () => {
+      delete debugWindow.__characterAnimation
+      mixer.removeEventListener('loop', onLoop)
+      mixer.stopAllAction()
+      mixer.uncacheRoot(scene)
+      activeState.current = null
+      activeAction.current = null
+    }
+  }, [actions, animations, mixer, scene])
 
   const calibration = useMemo<Calibration>(() => {
     // Keep the cached GLTF skeleton, materials, and textures; visit meshes once.
@@ -54,6 +67,9 @@ function ImportedPlayer({ dropping }: { dropping: boolean }) {
       if ('isMesh' in object && object.isMesh) {
         object.castShadow = true
         object.receiveShadow = true
+        // Skinned bounds change with the pose; never cull a moving limb using
+        // the static bind-pose bounding volume.
+        if ('isSkinnedMesh' in object && object.isSkinnedMesh) object.frustumCulled = false
       }
     })
 
@@ -64,7 +80,9 @@ function ImportedPlayer({ dropping }: { dropping: boolean }) {
   }, [scene])
 
   useFrame((_, rawDelta) => {
-    const delta = Math.min(rawDelta, 0.05)
+    const delta = Math.min(rawDelta, 0.1)
+    const distance = Math.max(0, playerState.distanceTravelled - lastDistance.current)
+    lastDistance.current = playerState.distanceTravelled
     let state: string
     if (dropping) {
       state = playerState.y < CHUTE_ALTITUDE ? 'Parachute' : 'Freefall'
@@ -73,55 +91,36 @@ function ImportedPlayer({ dropping }: { dropping: boolean }) {
     } else if (performance.now() - playerState.landedAt < 420 && playerState.landedAt > 0) {
       state = 'Land'
     } else {
-      // Grounded locomotion is posed below from the controller's actual
-      // displacement. The Idle clip supplies the neutral pose and breathing.
-      state = 'Idle'
+      state = playerState.speed > 0.35
+        ? (playerState.gait === 2 ? 'Run' : 'Walk')
+        : 'Idle'
     }
 
     const next = actions[state]
     if (!next) return
     if (activeState.current !== state) {
-      const looping = ['Idle', 'Fall', 'Freefall', 'Parachute'].includes(state)
+      const looping = state !== 'Jump' && state !== 'Land'
       next.reset()
       next.enabled = true
       next.setLoop(looping ? LoopRepeat : LoopOnce, looping ? Infinity : 1)
       next.clampWhenFinished = !looping
       next.setEffectiveWeight(1)
       next.setEffectiveTimeScale(1)
-      next.fadeIn(0.18).play()
-      activeAction.current?.fadeOut(0.18)
+      next.fadeIn(0.25).play()
+      activeAction.current?.fadeOut(0.25)
       activeAction.current = next
       activeState.current = state
     }
 
-    const movingOnGround = !dropping && state === 'Idle' && playerState.grounded && playerState.speed > 0.35
-    const targetWeight = movingOnGround ? 1 : 0
-    gaitWeight.current += (targetWeight - gaitWeight.current) * (1 - Math.exp(-10 * delta))
-
-    if (movingOnGround) {
-      // A full cycle advances by distance traveled, not wall-clock time. This
-      // keeps feet synchronized when the controller accelerates or hits an obstacle.
-      const running = playerState.gait === 2
-      const strideLength = running ? 3.2 : 2.2
-      gaitPhase.current = (gaitPhase.current + playerState.speed * delta * Math.PI * 2 / strideLength) % (Math.PI * 2)
+    // Advance one cycle per stride actually travelled. Using distance rather
+    // than requested velocity also handles blocked movement and clamped physics
+    // timesteps on slow frames without speeding the legs past the controller.
+    if (state === 'Walk' || state === 'Run') {
+      const stride = state === 'Walk' ? strides.walk : strides.run
+      next.setEffectiveTimeScale(delta > 0 ? distance * next.getClip().duration / (stride * delta) : 0)
     }
-
-    const phase = gaitPhase.current
-    const swing = Math.sin(phase) * (playerState.gait === 2 ? 0.78 : 0.48) * gaitWeight.current
-    const kneeLeft = Math.max(0, Math.sin(phase)) * (playerState.gait === 2 ? 0.72 : 0.42) * gaitWeight.current
-    const kneeRight = Math.max(0, -Math.sin(phase)) * (playerState.gait === 2 ? 0.72 : 0.42) * gaitWeight.current
-    const armSwing = swing * (playerState.gait === 2 ? 0.72 : 0.62)
-
-    rig.leftThigh?.bone.rotation.set(rig.leftThigh.x + swing, rig.leftThigh.y, rig.leftThigh.z)
-    rig.rightThigh?.bone.rotation.set(rig.rightThigh.x - swing, rig.rightThigh.y, rig.rightThigh.z)
-    rig.leftKnee?.bone.rotation.set(rig.leftKnee.x - kneeLeft, rig.leftKnee.y, rig.leftKnee.z)
-    rig.rightKnee?.bone.rotation.set(rig.rightKnee.x + kneeRight, rig.rightKnee.y, rig.rightKnee.z)
-    rig.leftFoot?.bone.rotation.set(rig.leftFoot.x + kneeLeft * 0.25, rig.leftFoot.y, rig.leftFoot.z)
-    rig.rightFoot?.bone.rotation.set(rig.rightFoot.x - kneeRight * 0.25, rig.rightFoot.y, rig.rightFoot.z)
-    rig.leftArm?.bone.rotation.set(rig.leftArm.x - armSwing, rig.leftArm.y, rig.leftArm.z)
-    rig.rightArm?.bone.rotation.set(rig.rightArm.x + armSwing, rig.rightArm.y, rig.rightArm.z)
-    rig.leftElbow?.bone.rotation.set(rig.leftElbow.x - kneeLeft * 0.25, rig.leftElbow.y, rig.leftElbow.z)
-    rig.rightElbow?.bone.rotation.set(rig.rightElbow.x - kneeRight * 0.25, rig.rightElbow.y, rig.rightElbow.z)
+    // This is the ONLY mixer update. Bones are exclusively owned by the clips.
+    mixer.update(delta)
   })
 
   return (
